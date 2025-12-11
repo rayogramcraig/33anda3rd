@@ -177,13 +177,13 @@
       margin-top: 10px;
     }
 
-    /* Tonearm overlay on scanning record */
+    /* Tonearm overlay on scanning record – tuned to sit beside the record */
     .tonearm {
       position: absolute;
-      width: 54%;
-      right: -6%;
-      top: 12%;
-      transform: rotate(12deg);
+      width: 52%;
+      right: -12%;
+      top: 20%;
+      transform: rotate(20deg);
       pointer-events: none;
       z-index: 10;
     }
@@ -303,12 +303,21 @@
     .album-meta h2 { font-size: 24px; line-height: 1.1; margin-bottom: 10px; }
     .album-meta h3 { font-size: 24px; line-height: 1.1; }
 
-    /* Info button now on bottom row */
-    .info-button {
+    /* Bottom row: evenly spaced controls */
+    .results-bottom-row {
       position: absolute;
-      left: 50%;
-      bottom: 26px;
-      transform: translateX(-50%);
+      left: 24px;
+      right: 24px;
+      bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    /* Info button in the row */
+    .info-button {
+      flex: 0 0 auto;
       width: 60px;
       height: 60px;
       border-radius: 50%;
@@ -324,13 +333,11 @@
     }
 
     .retake-button {
-      position: absolute;
-      left: 24px;
-      bottom: 18px;
       border: none;
       padding: 0;
       background: transparent;
       cursor: pointer;
+      flex: 0 0 auto;
     }
 
     /* New flat mini-record used on results screen */
@@ -375,9 +382,6 @@
     }
 
     .discogs-button {
-      position: absolute;
-      right: 24px;
-      bottom: 26px;
       border: none;
       border-radius: 999px;
       padding: 14px 26px 14px 24px;
@@ -391,6 +395,8 @@
       gap: 10px;
       cursor: pointer;
       box-shadow: var(--shadow-soft);
+      flex: 0 0 auto;
+      white-space: nowrap;
     }
     .discogs-button .play-icon {
       width: 0;
@@ -558,18 +564,20 @@
           <h3 id="albumTitle">Title</h3>
         </div>
 
-        <button class="info-button" type="button" id="infoButton" aria-label="Show technical results">i</button>
+        <div class="results-bottom-row">
+          <button class="retake-button" type="button" id="retakeButton" aria-label="Shoot another label">
+            <div class="mini-record">
+              <div class="mini-label"></div>
+            </div>
+          </button>
 
-        <button class="retake-button" type="button" id="retakeButton" aria-label="Shoot another label">
-          <div class="mini-record">
-            <div class="mini-label"></div>
-          </div>
-        </button>
+          <button class="info-button" type="button" id="infoButton" aria-label="Show technical results">i</button>
 
-        <button class="discogs-button" type="button" id="discogsButton" aria-label="Open release on Discogs">
-          <span class="play-icon" aria-hidden="true"></span>
-          <span>Discogs</span>
-        </button>
+          <button class="discogs-button" type="button" id="discogsButton" aria-label="Open release on Discogs">
+            <span class="play-icon" aria-hidden="true"></span>
+            <span>Discogs</span>
+          </button>
+        </div>
       </div>
 
       <div class="results-overlay" id="resultsOverlay" aria-hidden="true">
