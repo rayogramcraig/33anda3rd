@@ -1,5 +1,29 @@
 // netlify/functions/discogsSearch.js
 
+async function googleSearch(query, apiKey) {
+  const serpUrl =
+    "https://serpapi.com/search?engine=google&q=" +
+    encodeURIComponent(query) +
+    "&api_key=" +
+    encodeURIComponent(apiKey);
+
+  const res = await fetch(serpUrl);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `SerpAPI error ${res.status}: ${text.slice(0, 500)}`
+    );
+  }
+  return res.json();
+}
+
+function pickDiscogsResult(organic) {
+  if (!organic || !Array.isArray(organic)) return null;
+  return organic.find(
+    (r) => r.link && r.link.includes("discogs.com")
+  );
+}
+
 exports.handler = async (event, context) => {
   try {
     const query = event.queryStringParameters.query || "";
@@ -20,57 +44,52 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // 1) Ask Google (via SerpAPI) for Discogs results
-    const googleQuery = `site:discogs.com ${query}`;
-    const serpUrl =
-      "https://serpapi.com/search?engine=google&q=" +
-      encodeURIComponent(googleQuery) +
-      "&api_key=" +
-      encodeURIComponent(apiKey);
+    const primaryGoogleQuery = `site:discogs.com ${query}`;
+    let searchSource = "primary";
+    let discogsUrl = null;
+    let title = null;
+    let coverImage = null;
+    let debugInfo = {};
 
-    const serpRes = await fetch(serpUrl);
-    if (!serpRes.ok) {
-      const text = await serpRes.text();
-      return {
-        statusCode: 502,
-        body: JSON.stringify({
-          error: "SerpAPI error",
-          status: serpRes.status,
-          body: text,
-        }),
-      };
-    }
+    // 1) First pass: restrict to Discogs
+    let serp = await googleSearch(primaryGoogleQuery, apiKey);
+    let organic = serp.organic_results || [];
+    debugInfo.primaryOrganicCount = organic.length;
 
-    const serp = await serpRes.json();
-    const organic = serp.organic_results || [];
+    let chosen = pickDiscogsResult(organic);
 
-    // Try to find an explicit Discogs link first
-    let chosen = organic.find(
-      (r) => r.link && r.link.includes("discogs.com")
-    );
+    // 2) Fallback: general Google search (no site: filter)
+    if (!chosen) {
+      const fallbackGoogleQuery = query;
+      searchSource = "fallback";
+      debugInfo.fallbackGoogleQuery = fallbackGoogleQuery;
 
-    // Fallback: just use the first organic result if we have one at all
-    if (!chosen && organic.length > 0) {
-      chosen = organic[0];
+      const serp2 = await googleSearch(fallbackGoogleQuery, apiKey);
+      const organic2 = serp2.organic_results || [];
+      debugInfo.fallbackOrganicCount = organic2.length;
+
+      chosen = pickDiscogsResult(organic2);
+      organic = organic2;
     }
 
     if (!chosen || !chosen.link) {
-      // Truly nothing useful came back
+      // Still no Discogs link found at all
       return {
         statusCode: 404,
         body: JSON.stringify({
-          error: "No Discogs result found in Google search",
-          googleQuery,
-          debug: { organicCount: organic.length },
+          error: "No Discogs link found in Google results",
+          query,
+          searchSource,
+          debug: debugInfo,
         }),
       };
     }
 
-    let discogsUrl = chosen.link;
-    let title = chosen.title || null;
-    let coverImage = chosen.thumbnail || null;
+    discogsUrl = chosen.link;
+    title = chosen.title || null;
+    coverImage = chosen.thumbnail || null;
 
-    // 2) Try Discogs API for better metadata / cover
+    // 3) Try Discogs API for richer metadata
     let discogsJson = null;
     const releaseMatch = discogsUrl.match(/\/release\/(\d+)/);
     const masterMatch = discogsUrl.match(/\/master\/(\d+)/);
@@ -78,8 +97,8 @@ exports.handler = async (event, context) => {
     const userAgent =
       "33anda3rd/1.0 +https://33anda3rd.netlify.app/";
     const discogsHeaders = { "User-Agent": userAgent };
-
     const discogsToken = process.env.DISCOGS_TOKEN; // optional
+
     if (discogsToken) {
       discogsHeaders["Authorization"] = `Discogs token=${discogsToken}`;
     }
@@ -89,7 +108,7 @@ exports.handler = async (event, context) => {
         headers: discogsHeaders,
       });
       if (!res.ok) return null;
-      return await res.json();
+      return res.json();
     }
 
     if (releaseMatch) {
@@ -101,9 +120,7 @@ exports.handler = async (event, context) => {
     }
 
     if (discogsJson) {
-      if (!title && discogsJson.title) {
-        title = discogsJson.title;
-      }
+      if (!title && discogsJson.title) title = discogsJson.title;
       if (discogsJson.images && discogsJson.images.length > 0) {
         const img = discogsJson.images[0];
         coverImage = img.uri || img.uri150 || coverImage;
@@ -114,7 +131,8 @@ exports.handler = async (event, context) => {
       statusCode: 200,
       body: JSON.stringify({
         query,
-        googleQuery,
+        searchSource,
+        primaryGoogleQuery,
         discogsUrl,
         title,
         coverImage,
