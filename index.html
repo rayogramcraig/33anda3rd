@@ -71,6 +71,12 @@
       transform: translateX(0);
     }
 
+    .screen-processing {
+      opacity: 0;
+      transform: translateX(100%);
+      pointer-events: none;
+    }
+
     .screen-results {
       opacity: 0;
       transform: translateX(100%);
@@ -78,7 +84,34 @@
       padding: 0;
     }
 
+    /* Default visible */
+    .app:not(.show-processing):not(.show-results) .screen-default {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    /* Processing state */
+    .app.show-processing .screen-default {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
+
+    .app.show-processing .screen-processing {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    /* Results state */
     .app.show-results .screen-default {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
+
+    .app.show-results .screen-processing {
       opacity: 0;
       transform: translateX(-100%);
       pointer-events: none;
@@ -90,7 +123,7 @@
       pointer-events: auto;
     }
 
-    /* DEFAULT SCREEN – “shoot the label” */
+    /* DEFAULT SCREEN – “just the label” */
 
     .screen-default h1 {
       margin: 0 0 40px;
@@ -170,7 +203,7 @@
       background: var(--accent-yellow);
       transform-origin: top center;
       border-radius: 999px;
-	  visibility:hidden;
+      visibility: hidden;
     }
 
     .label-beam.left {
@@ -188,6 +221,50 @@
       border: none;
       background: transparent;
       cursor: pointer;
+    }
+
+    /* PROCESSING SCREEN */
+
+    .screen-processing h1 {
+      margin: 0 0 32px;
+      font-size: 24px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    .processing-record-wrapper {
+      position: relative;
+      width: 76%;
+      max-width: 320px;
+      margin-top: 10px;
+    }
+
+    .record.spinning {
+      transform: none;
+      animation: spin 1.4s linear infinite;
+    }
+
+    .processing-label-text {
+      margin-top: 32px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      opacity: 0.8;
+    }
+
+    .processing-status {
+      margin-top: 8px;
+      font-size: 13px;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     /* RESULTS SCREEN */
@@ -526,7 +603,7 @@
 
 <body>
   <div class="app" id="app">
-    <!-- hidden file input used by both screens -->
+    <!-- hidden file input used by all screens -->
     <input
       type="file"
       id="fileInput"
@@ -552,6 +629,20 @@
         type="button"
         aria-label="Shoot the label"
       ></button>
+    </section>
+
+    <!-- PROCESSING SCREEN -->
+    <section class="screen screen-processing" aria-label="Processing label">
+      <h1>finding your record</h1>
+
+      <div class="processing-record-wrapper">
+        <div class="record spinning">
+          <div class="record-label"></div>
+        </div>
+      </div>
+
+      <div class="processing-label-text">analyzing the label…</div>
+      <div class="processing-status" id="processingStatus">Loading image…</div>
     </section>
 
     <!-- RESULTS SCREEN -->
@@ -650,6 +741,7 @@
     const matchStatus = document.getElementById("matchStatus");
     const ocrOutput = document.getElementById("ocrOutput");
     const cleanQueryLine = document.getElementById("cleanQueryLine");
+    const processingStatus = document.getElementById("processingStatus");
 
     const discogsCover = document.getElementById("discogsCover");
     const albumArtist = document.getElementById("albumArtist");
@@ -671,6 +763,8 @@
     retakeButton.addEventListener("click", () => {
       overlay.classList.remove("open");
       overlay.setAttribute("aria-hidden", "true");
+      app.classList.remove("show-results");
+      app.classList.remove("show-processing");
       fileInput.click();
     });
 
@@ -679,9 +773,14 @@
       const file = fileInput.files && fileInput.files[0];
       if (!file) return;
 
+      // move to processing screen
+      app.classList.add("show-processing");
+      app.classList.remove("show-results");
+
       matchStatus.textContent = "";
       ocrOutput.textContent = "";
       cleanQueryLine.textContent = "";
+      processingStatus.textContent = "Loading image…";
       statusText.textContent = "Loading image…";
       currentDiscogsUrl = "";
       currentGoogleQuery = "";
@@ -720,6 +819,7 @@
       }
       ctx.putImageData(imageData, 0, 0);
 
+      processingStatus.textContent = "Running OCR…";
       statusText.textContent = "Running OCR…";
       runOCR();
     }
@@ -763,16 +863,21 @@
       try {
         const { data } = await Tesseract.recognize(canvas, "eng", {
           logger: (m) => {
-            if (m.status === "recognizing text" && m.progress) {
+            if (m.status === "recognizing text" && m.progress != null) {
               const pct = Math.round(m.progress * 100);
-              statusText.textContent = `Running OCR… ${pct}%`;
+              const msg = `Running OCR… ${pct}%`;
+              processingStatus.textContent = msg;
+              statusText.textContent = msg;
             }
           },
         });
 
         const text = data.text || "";
         ocrOutput.textContent = text.trim();
-        statusText.textContent = "OCR complete. Trying to identify record…";
+        processingStatus.textContent =
+          "OCR complete. Trying to identify record…";
+        statusText.textContent =
+          "OCR complete. Trying to identify record…";
 
         const cleanQuery = buildCleanQuery(text);
         cleanQueryLine.textContent = cleanQuery
@@ -781,6 +886,7 @@
         if (!cleanQuery) {
           matchStatus.textContent =
             "Not enough text to search. Try a clearer photo.";
+          app.classList.remove("show-processing");
           return;
         }
 
@@ -793,6 +899,7 @@
           const errText = await res.text();
           matchStatus.textContent = "Lookup error: " + res.status;
           console.error("discogsSearch error:", errText);
+          app.classList.remove("show-processing");
           return;
         }
 
@@ -824,12 +931,17 @@
           discogsCover.removeAttribute("src");
         }
 
+        processingStatus.textContent = "Done.";
         statusText.textContent = "Done.";
+
+        app.classList.remove("show-processing");
         app.classList.add("show-results");
       } catch (err) {
         console.error(err);
+        processingStatus.textContent = "Error during OCR or lookup.";
         statusText.textContent = "Error during OCR or lookup.";
         matchStatus.textContent = "";
+        app.classList.remove("show-processing");
       }
     }
 
