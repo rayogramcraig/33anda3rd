@@ -177,6 +177,17 @@
       margin-top: 10px;
     }
 
+    /* Tonearm overlay on scanning record */
+    .tonearm {
+      position: absolute;
+      width: 54%;
+      right: -6%;
+      top: 12%;
+      transform: rotate(12deg);
+      pointer-events: none;
+      z-index: 10;
+    }
+
     /* Flattened, circular record on processing screen */
     .processing-record-wrapper .record {
       padding-bottom: 100%;
@@ -292,19 +303,21 @@
     .album-meta h2 { font-size: 24px; line-height: 1.1; margin-bottom: 10px; }
     .album-meta h3 { font-size: 24px; line-height: 1.1; }
 
+    /* Info button now on bottom row */
     .info-button {
       position: absolute;
-      left: 24px;
-      bottom: 104px;
-      width: 64px;
-      height: 64px;
+      left: 50%;
+      bottom: 26px;
+      transform: translateX(-50%);
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       border: none;
       background: #ffffff;
       color: var(--accent-red);
       font-style: italic;
-      font-size: 34px;
-      line-height: 64px;
+      font-size: 32px;
+      line-height: 60px;
       text-align: center;
       box-shadow: var(--shadow-soft);
       cursor: pointer;
@@ -319,16 +332,15 @@
       background: transparent;
       cursor: pointer;
     }
+
+    /* New flat mini-record used on results screen */
     .mini-record {
       position: relative;
-      width: 120px;
-      padding-bottom: 68px;
+      width: 88px;
+      padding-bottom: 88px; /* perfect circle */
       border-radius: 50%;
-      background: radial-gradient(
-        ellipse at 30% 30%,
-        #777 0%, #222 55%, #020202 100%
-      );
-      transform: rotate(-16deg);
+      background: radial-gradient(circle at 30% 30%, #777 0%, #222 55%, #020202 100%);
+      transform: none;
       box-shadow: var(--shadow-soft);
     }
     .mini-record::before {
@@ -343,9 +355,9 @@
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 35%;
-      height: 35%;
-      transform: translate(-50%, -50%) rotate(16deg);
+      width: 34%;
+      height: 34%;
+      transform: translate(-50%, -50%);
       border-radius: 50%;
       background: #fff;
     }
@@ -525,6 +537,7 @@
         <div class="record spinning">
           <div class="record-label"></div>
         </div>
+        <img class="tonearm" src="tonearm.png" alt="" />
       </div>
       <div class="processing-label-text">analyzing the label…</div>
       <div class="processing-status" id="processingStatus">Loading image…</div>
