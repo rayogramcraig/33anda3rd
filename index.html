@@ -2,314 +2,431 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>33⅓</title>
+  <title>33⅓ – Label Scanner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Tesseract.js for OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+
   <style>
-    * { box-sizing: border-box; }
+    :root {
+      --bg: #f4f4f4;
+      --card: #ffffff;
+      --accent: #111111;
+      --accent-soft: #222222;
+      --text-main: #111111;
+      --text-muted: #666666;
+      --radius-lg: 20px;
+      --shadow-soft: 0 16px 40px rgba(0, 0, 0, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
-      padding: 1rem;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f7f7f7;
-      color: #111;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Helvetica Neue", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #ececec, #e1e1e1);
+      color: var(--text-main);
     }
-    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
-    h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; }
-    p  { margin: 0.25rem 0 0.5rem; }
 
-    .uploader {
-      margin: 0.75rem 0 0.5rem;
+    .shell {
+      max-width: 720px;
+      margin: 0 auto 64px auto;
+      background: var(--card);
+      border-radius: 32px;
+      padding: 24px 24px 32px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    header {
+      margin-bottom: 24px;
+    }
+
+    .logo-row {
       display: flex;
-      gap: 0.5rem;
-      align-items: center;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
     }
-    input[type="file"] { display: none; }
 
-    .btn {
+    h1 {
+      font-size: 32px;
+      letter-spacing: 0.04em;
+      margin: 0;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--text-muted);
+    }
+
+    .picker-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 20px;
       border-radius: 999px;
       border: none;
-      padding: 0.6rem 1.2rem;
-      font-size: 0.95rem;
-      font-weight: 500;
       cursor: pointer;
-      background: #111;
-      color: #fff;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      text-align: center;
-      display: inline-block;
+      background: var(--accent);
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+      transition: transform 0.05s ease-out, box-shadow 0.05s ease-out,
+        background 0.15s ease-out;
     }
-    .btn:active {
+
+    .btn-primary:active {
       transform: translateY(1px);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+    }
+
+    .file-name {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    h2 {
+      font-size: 18px;
+      margin: 24px 0 10px;
     }
 
     canvas {
       width: 100%;
-      max-width: 480px;
+      max-height: 520px;
+      border-radius: 24px;
       display: block;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
       background: #000;
-      margin: 0.25rem 0;
-    }
-
-    pre {
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      font-family: Menlo, Monaco, Consolas, "SF Mono", monospace;
-      background: #fff;
-      padding: 0.75rem;
-      border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-      font-size: 0.8rem;
-      max-height: 220px;
-      overflow: auto;
-    }
-
-    a {
-      color: #0055ff;
-      word-break: break-all;
+      object-fit: contain;
     }
 
     .status {
-      font-size: 0.8rem;
-      color: #555;
-      margin-top: 0.25rem;
+      margin-top: 8px;
+      font-size: 14px;
+      color: var(--text-muted);
     }
 
-    .query-preview {
-      font-size: 0.8rem;
-      color: #333;
-      margin-top: 0.25rem;
-      font-family: Menlo, Monaco, Consolas, "SF Mono", monospace;
-    }
-
-    .result-card {
-      margin-top: 1rem;
-      padding: 0.75rem;
-      border-radius: 10px;
-      background: #fff;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-      max-width: 480px;
-    }
-    .result-card img {
+    textarea {
       width: 100%;
-      border-radius: 8px;
-      margin-bottom: 0.5rem;
-      display: block;
+      min-height: 160px;
+      border-radius: 16px;
+      border: 1px solid #ddd;
+      padding: 12px;
+      font-size: 13px;
+      font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+      resize: vertical;
+      background: #fafafa;
     }
-    .result-title {
+
+    .meta-line {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      word-break: break-word;
+    }
+
+    .discogs-card {
+      margin-top: 24px;
+      border-radius: 24px;
+      padding: 16px;
+      background: #f7f7f7;
+      display: none;
+    }
+
+    .discogs-title {
+      font-size: 17px;
       font-weight: 600;
-      margin-bottom: 0.25rem;
+      margin-bottom: 8px;
+    }
+
+    .discogs-layout {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .discogs-cover {
+      width: 160px;
+      border-radius: 14px;
+      object-fit: cover;
+      background: #ddd;
+      flex-shrink: 0;
+    }
+
+    .discogs-info {
+      flex: 1 1 200px;
+      font-size: 13px;
+    }
+
+    a {
+      color: #0054d6;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 600px) {
+      .shell {
+        padding: 20px 16px 28px;
+        border-radius: 24px;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+
+      .discogs-cover {
+        width: 130px;
+      }
     }
   </style>
 </head>
+
 <body>
-  <h1>33⅓</h1>
-  <p>
-    Take a photo of the record label so it fills most of the frame. The app will:
-    OCR the text → clean it → call a Netlify function → fetch the top Discogs match + cover.
-  </p>
+  <div class="shell">
+    <header>
+      <div class="logo-row">
+        <h1>33⅓</h1>
+      </div>
+      <p class="subtitle">
+        Take a photo of the record label so it fills most of the frame.
+        The app will: OCR the text → clean it → call a Netlify function →
+        fetch the top Discogs match + cover.
+      </p>
+    </header>
 
-  <div class="uploader">
-    <label for="photoInput" class="btn">Take / Choose Photo</label>
-    <input id="photoInput" type="file" accept="image/*" capture="environment" />
-    <span id="fileName" style="font-size:0.8rem;color:#555;"></span>
+    <section>
+      <div class="picker-row">
+        <button class="btn-primary" id="pickButton">
+          Take / Choose Photo
+        </button>
+        <span class="file-name" id="fileName">No file selected</span>
+        <input
+          type="file"
+          id="fileInput"
+          accept="image/*"
+          capture="environment"
+          style="display: none"
+        />
+      </div>
+    </section>
+
+    <section>
+      <h2>Cropped Label (what OCR sees)</h2>
+      <canvas id="labelCanvas"></canvas>
+      <div class="status" id="statusText">Waiting for a photo…</div>
+    </section>
+
+    <section>
+      <h2>OCR Result</h2>
+      <div class="status" id="matchStatus"></div>
+      <textarea id="ocrOutput" readonly></textarea>
+      <div class="meta-line" id="cleanQueryLine"></div>
+    </section>
+
+    <section class="discogs-card" id="discogsCard">
+      <div class="discogs-title" id="discogsTitle"></div>
+      <div class="discogs-layout">
+        <img
+          id="discogsCover"
+          class="discogs-cover"
+          alt="Album cover"
+          src=""
+        />
+        <div class="discogs-info">
+          <div id="discogsLink"></div>
+          <div class="meta-line" id="discogsMeta"></div>
+        </div>
+      </div>
+    </section>
   </div>
 
-  <h2>Cropped Label (what OCR sees)</h2>
-  <canvas id="canvas"></canvas>
-
-  <h2>OCR Result</h2>
-  <div class="status" id="statusText">Waiting for a photo…</div>
-  <pre id="ocrText"></pre>
-  <div id="queryPreview" class="query-preview"></div>
-
-  <div id="discogsResult" class="result-card" style="display:none;">
-    <div class="result-title" id="discogsTitle"></div>
-    <img id="discogsCover" alt="Album cover" style="display:none;" />
-    <div id="discogsLink"></div>
-    <div style="font-size:0.75rem;color:#777;margin-top:0.25rem;" id="discogsMeta"></div>
-  </div>
-
-  <canvas id="fullCanvas" style="display:none;"></canvas>
-
-  <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script>
-    const photoInput   = document.getElementById("photoInput");
-    const fileName     = document.getElementById("fileName");
-    const canvas       = document.getElementById("canvas");
-    const fullCanvas   = document.getElementById("fullCanvas");
-    const statusText   = document.getElementById("statusText");
-    const ocrText      = document.getElementById("ocrText");
-    const queryPreview = document.getElementById("queryPreview");
+    const fileInput = document.getElementById("fileInput");
+    const pickButton = document.getElementById("pickButton");
+    const fileNameSpan = document.getElementById("fileName");
+    const canvas = document.getElementById("labelCanvas");
+    const ctx = canvas.getContext("2d");
 
-    const discogsCard  = document.getElementById("discogsResult");
+    const statusText = document.getElementById("statusText");
+    const matchStatus = document.getElementById("matchStatus");
+    const ocrOutput = document.getElementById("ocrOutput");
+    const cleanQueryLine = document.getElementById("cleanQueryLine");
+
+    const discogsCard = document.getElementById("discogsCard");
     const discogsTitle = document.getElementById("discogsTitle");
     const discogsCover = document.getElementById("discogsCover");
-    const discogsLink  = document.getElementById("discogsLink");
-    const discogsMeta  = document.getElementById("discogsMeta");
+    const discogsLink = document.getElementById("discogsLink");
+    const discogsMeta = document.getElementById("discogsMeta");
 
-    photoInput.addEventListener("change", handlePhoto);
+    pickButton.addEventListener("click", () => fileInput.click());
 
-    function handlePhoto(evt) {
-      const file = evt.target.files && evt.target.files[0];
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
       if (!file) return;
 
-      fileName.textContent = file.name || "New photo";
-      statusText.textContent = "Loading image…";
-      ocrText.textContent = "";
-      queryPreview.textContent = "";
+      fileNameSpan.textContent = file.name;
       discogsCard.style.display = "none";
+      matchStatus.textContent = "";
+      ocrOutput.value = "";
+      cleanQueryLine.textContent = "";
+      statusText.textContent = "Loading image…";
 
       const reader = new FileReader();
       reader.onload = (e) => {
         const img = new Image();
-        img.onload = () => processImage(img);
+        img.onload = () => {
+          processImage(img);
+        };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
-    }
+    });
 
     function processImage(img) {
-      const maxDim = 1600;
-      let w = img.width;
-      let h = img.height;
-      const scale = Math.min(1, maxDim / Math.max(w, h));
-      w = Math.round(w * scale);
-      h = Math.round(h * scale);
+      // Crop to center square where label lives
+      const size = Math.min(img.width, img.height);
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
 
-      fullCanvas.width = w;
-      fullCanvas.height = h;
-      const fctx = fullCanvas.getContext("2d");
-      fctx.drawImage(img, 0, 0, w, h);
+      canvas.width = size;
+      canvas.height = size;
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
 
-      const labelSize = Math.round(Math.min(w, h) * 0.9);
-      const cx = Math.round((w - labelSize) / 2);
-      const cy = Math.round((h - labelSize) / 2);
-
-      const TARGET = 1024;
-      const labelCanvas = document.createElement("canvas");
-      labelCanvas.width = TARGET;
-      labelCanvas.height = TARGET;
-      const lctx = labelCanvas.getContext("2d");
-
-      lctx.drawImage(
-        fullCanvas,
-        cx, cy, labelSize, labelSize,
-        0, 0, TARGET, TARGET
-      );
-
-      const imgData = lctx.getImageData(0, 0, TARGET, TARGET);
-      const pixels = imgData.data;
-
-      let min = 255, max = 0;
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
-        const gray = 0.3*r + 0.59*g + 0.11*b;
-        if (gray < min) min = gray;
-        if (gray > max) max = gray;
+      // Simple grayscale for OCR (no harsh thresholding)
+      const imageData = ctx.getImageData(0, 0, size, size);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        data[i] = data[i + 1] = data[i + 2] = gray;
       }
-      const range = Math.max(1, max - min);
+      ctx.putImageData(imageData, 0, 0);
 
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
-        const gray = 0.3*r + 0.59*g + 0.11*b;
-        const norm = (gray - min) / range;
-        const v = Math.max(0, Math.min(255, norm * 255));
-        pixels[i] = pixels[i+1] = pixels[i+2] = v;
-      }
-      lctx.putImageData(imgData, 0, 0);
-
-      canvas.width = TARGET;
-      canvas.height = TARGET;
-      const showCtx = canvas.getContext("2d");
-      showCtx.drawImage(labelCanvas, 0, 0, TARGET, TARGET);
-
-      const dataUrl = labelCanvas.toDataURL("image/png");
-      runOCR(dataUrl);
-    }
-
-    function buildSearchQuery(rawText) {
-      if (!rawText) return "";
-      let text = rawText.replace(/\s+/g, " ");
-      let rawTokens = text.split(" ").map(t =>
-        t.replace(/[^A-Za-z0-9']/g, "")
-      );
-
-      const stopwords = new Set([
-        "WITH","AND","THE","OF","INC","LTD","SIDE","HIGH","FIDELITY",
-        "STEREO","MONO","RECORDS","RECORD","COMPANY","LIMITED",
-        "STEREOPHONIC","LONG","PLAY","MICROGROOVE","MADE","IN",
-        "NEW","YORK","N","J","USA","ALBUM"
-      ]);
-
-      const cleanTokens = [];
-      const seen = new Set();
-
-      for (let tok of rawTokens) {
-        if (!tok) continue;
-        const upper = tok.toUpperCase();
-        if (upper.length < 3) continue;
-        if (/^\d+$/.test(upper) && upper.length < 4) continue;
-        if (seen.has(upper)) continue;
-        if (stopwords.has(upper)) continue;
-
-        seen.add(upper);
-        cleanTokens.push(tok);
-        if (cleanTokens.length >= 12) break;
-      }
-
-      return cleanTokens.join(" ");
-    }
-
-    async function runOCR(dataUrl) {
       statusText.textContent = "Running OCR…";
-      ocrText.textContent = "";
-      discogsCard.style.display = "none";
+      runOCR();
+    }
 
-      try {
-        const { data } = await Tesseract.recognize(dataUrl, "eng", {
-          tessedit_pageseg_mode: 6
+    function buildCleanQuery(rawText) {
+      // Keep lines & words that look like titles, artists, songs, cat nos etc.
+      const lines = rawText.split(/\r?\n/);
+      const tokens = [];
+
+      for (let line of lines) {
+        line = line
+          .replace(/[^A-Za-z0-9'&()\- ]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!line) continue;
+
+        const words = line.split(" ");
+        const goodWords = words.filter((w) => {
+          if (!w) return false;
+          if (/^\d+$/.test(w)) return true; // numbers (cat#, times)
+          return w.length > 2;
         });
-        const raw = (data.text || "").trim();
-        ocrText.textContent = raw || "[no text detected]";
 
-        const query = buildSearchQuery(raw);
-        if (!query) {
-          statusText.textContent =
-            "OCR ran, but no good words were found. Try another photo.";
-          queryPreview.textContent = "";
+        if (goodWords.length) {
+          tokens.push(...goodWords);
+        }
+      }
+
+      // Deduplicate while preserving order
+      const seen = new Set();
+      const final = [];
+      for (let w of tokens) {
+        const key = w.toUpperCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          final.push(w);
+        }
+      }
+      return final.join(" ");
+    }
+
+    async function runOCR() {
+      try {
+        const { data } = await Tesseract.recognize(canvas, "eng", {
+          logger: (m) => {
+            if (m.status === "recognizing text" && m.progress) {
+              const pct = Math.round(m.progress * 100);
+              statusText.textContent = `Running OCR… ${pct}%`;
+            }
+          },
+        });
+
+        const text = data.text || "";
+        ocrOutput.value = text.trim();
+        statusText.textContent = "OCR complete. Trying to identify record…";
+
+        const cleanQuery = buildCleanQuery(text);
+        cleanQueryLine.textContent = cleanQuery
+          ? "Cleaned query: " + cleanQuery
+          : "Cleaned query: (nothing usable found)";
+        if (!cleanQuery) {
+          matchStatus.textContent =
+            "Not enough text to search. Try a clearer photo.";
           return;
         }
 
-        queryPreview.textContent = "Cleaned query: " + query;
-        statusText.textContent = "Looking up Discogs match…";
-
+        // Call Netlify function with cleaned query
         const res = await fetch(
           "/.netlify/functions/discogsSearch?query=" +
-          encodeURIComponent(query)
+            encodeURIComponent(cleanQuery)
         );
 
         if (!res.ok) {
           const errText = await res.text();
-          statusText.textContent = "Lookup error: " + res.status;
+          matchStatus.textContent = "Lookup error: " + res.status;
           console.error("discogsSearch error:", errText);
+          discogsCard.style.display = "none";
           return;
         }
 
         const result = await res.json();
-        statusText.textContent = "Match found (via Google + Discogs).";
+        matchStatus.textContent = "Match found (via Google + Discogs).";
 
-        discogsTitle.textContent = result.title || "Discogs match";
+        discogsTitle.textContent =
+          result.title || "Discogs match";
+
         discogsLink.innerHTML =
           'Discogs: <a href="' +
           result.discogsUrl +
-          '" target="_blank">' +
+          '" target="_blank" rel="noopener noreferrer">' +
           result.discogsUrl +
           "</a>";
 
-        discogsMeta.textContent = "Google query: " + result.googleQuery;
+        const googleQuery =
+          result.primaryGoogleQuery ||
+          result.googleQuery ||
+          "";
+
+        discogsMeta.textContent = googleQuery
+          ? "Google query: " + googleQuery
+          : "";
 
         if (result.coverImage) {
           discogsCover.src = result.coverImage;
@@ -319,9 +436,12 @@
         }
 
         discogsCard.style.display = "block";
+        statusText.textContent = "Done.";
       } catch (err) {
         console.error(err);
-        statusText.textContent = "OCR or lookup error. Try another photo.";
+        statusText.textContent = "Error during OCR or lookup.";
+        matchStatus.textContent = "";
+        discogsCard.style.display = "none";
       }
     }
   </script>
