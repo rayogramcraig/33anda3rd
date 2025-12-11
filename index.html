@@ -122,7 +122,11 @@
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
           audio: false
         });
         video.srcObject = stream;
@@ -139,7 +143,7 @@
 
     function positionOverlay() {
       const rect = video.getBoundingClientRect();
-      const size = Math.min(rect.width, rect.height) * 0.8; // tighter crop
+      const size = Math.min(rect.width, rect.height) * 0.9; // super tight
       overlay.style.width = size + "px";
       overlay.style.height = size + "px";
       overlay.style.left = rect.left + (rect.width - size) / 2 + "px";
@@ -154,39 +158,48 @@
       const vw = video.videoWidth;
       const vh = video.videoHeight;
 
-      // Draw full frame
+      // Draw full frame to temp canvas
       const fullCtx = document.createElement("canvas").getContext("2d");
       fullCtx.canvas.width = vw;
       fullCtx.canvas.height = vh;
       fullCtx.drawImage(video, 0, 0, vw, vh);
 
-      // Crop to center square (label region)
-      const labelSize = Math.min(vw, vh) * 0.8;
+      // Crop center square (label region)
+      const labelSize = Math.min(vw, vh) * 0.9;
       const cx = (vw - labelSize) / 2;
       const cy = (vh - labelSize) / 2;
 
+      const TARGET = 1024; // larger working size for Tesseract
       const labelCanvas = document.createElement("canvas");
-      const TARGET = 640; // upscale to a consistent size for OCR
       labelCanvas.width = TARGET;
       labelCanvas.height = TARGET;
       const lctx = labelCanvas.getContext("2d");
 
-      // crop and scale
       lctx.drawImage(
         fullCtx.canvas,
         cx, cy, labelSize, labelSize,
         0, 0, TARGET, TARGET
       );
 
-      // grayscale only (no aggressive contrast)
+      // Grayscale + global threshold
       const imgData = lctx.getImageData(0, 0, TARGET, TARGET);
       const pixels = imgData.data;
+
+      // compute average luminance
+      let sum = 0;
       for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i];
-        const g = pixels[i + 1];
-        const b = pixels[i + 2];
-        const gray = 0.3 * r + 0.59 * g + 0.11 * b;
-        pixels[i] = pixels[i + 1] = pixels[i + 2] = gray;
+        const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
+        const gray = 0.3*r + 0.59*g + 0.11*b;
+        sum += gray;
+      }
+      const avg = sum / (pixels.length / 4);
+      const threshold = avg * 0.9; // slightly favor lighter text
+
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
+        const gray = 0.3*r + 0.59*g + 0.11*b;
+        const v = gray > threshold ? 255 : 0;
+        pixels[i] = pixels[i+1] = pixels[i+2] = v;
       }
       lctx.putImageData(imgData, 0, 0);
 
@@ -204,9 +217,7 @@
 
       try {
         const { data } = await Tesseract.recognize(dataUrl, "eng", {
-          tessedit_pageseg_mode: 6, // single uniform block of text
-          tessedit_char_whitelist:
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-./()&,:;'"
+          tessedit_pageseg_mode: 6 // assume a block of text
         });
 
         const text = (data.text || "").trim();
