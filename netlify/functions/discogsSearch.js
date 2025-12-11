@@ -24,6 +24,51 @@ function pickDiscogsResult(organic) {
   );
 }
 
+// First non-Discogs organic result – used as a "hint" (e.g., eBay)
+function pickHintResult(organic) {
+  if (!organic || !Array.isArray(organic)) return null;
+  return organic.find(
+    (r) => r.link && !r.link.includes("discogs.com")
+  );
+}
+
+// Try to extract artist + title from something like:
+// "Newk's Time (Blue Note Classic Vinyl Series) by Rollins, Sonny (Record, 2023)"
+// "Sonny Rollins - Newk's Time (Blue Note Classic Vinyl Series)"
+function parseArtistAndTitleFromTitle(title) {
+  if (!title) return null;
+
+  // Remove parenthetical clutter like (Blue Note Classic Vinyl Series), (Record, 2023), etc.
+  let base = title.replace(/\s*\([^)]*\)\s*/g, " ");
+
+  // Remove common suffix noise words at the end
+  base = base.replace(
+    /\s+\b(LP|Vinyl|Record|CD|Cassette|Album|Blu[- ]?ray|Box Set)\b.*$/i,
+    ""
+  );
+
+  base = base.trim();
+
+  // Pattern 1: "Album by Artist"
+  const byMatch = base.match(/^(.*?)\s+by\s+(.+?)$/i);
+  if (byMatch) {
+    const album = byMatch[1].trim();
+    const artist = byMatch[2].trim();
+    if (artist && album) return { artist, title: album };
+  }
+
+  // Pattern 2: "Artist - Album" or "Artist – Album"
+  const dashMatch = base.match(/^(.+?)\s+[-–]\s+(.+?)$/);
+  if (dashMatch) {
+    const artist = dashMatch[1].trim();
+    const album = dashMatch[2].trim();
+    if (artist && album) return { artist, title: album };
+  }
+
+  // No robust pattern hit
+  return null;
+}
+
 exports.handler = async (event, context) => {
   try {
     const query = event.queryStringParameters.query || "";
@@ -70,6 +115,35 @@ exports.handler = async (event, context) => {
 
       chosen = pickDiscogsResult(organic2);
       organic = organic2;
+
+      // 2b) Still nothing from Discogs – use top non-Discogs result
+      //     as a hint (e.g., eBay title), then re-search Discogs.
+      if (!chosen) {
+        const hint = pickHintResult(organic2);
+        debugInfo.hintTitle = hint ? hint.title : null;
+        debugInfo.hintLink = hint ? hint.link : null;
+
+        if (hint && hint.title) {
+          const parsed = parseArtistAndTitleFromTitle(hint.title);
+          debugInfo.hintParsed = parsed;
+
+          if (parsed) {
+            const hintDiscogsQuery = `site:discogs.com "${parsed.artist}" "${parsed.title}"`;
+            debugInfo.hintDiscogsQuery = hintDiscogsQuery;
+
+            const serp3 = await googleSearch(hintDiscogsQuery, apiKey);
+            const organic3 = serp3.organic_results || [];
+            debugInfo.hintOrganicCount = organic3.length;
+
+            const hintChosen = pickDiscogsResult(organic3);
+            if (hintChosen) {
+              chosen = hintChosen;
+              organic = organic3;
+              searchSource = "hint"; // mark that we used the hint flow
+            }
+          }
+        }
+      }
     }
 
     if (!chosen || !chosen.link) {
@@ -136,6 +210,7 @@ exports.handler = async (event, context) => {
         discogsUrl,
         title,
         coverImage,
+        debug: debugInfo, // keep for now; remove if you don't want it in the client
       }),
     };
   } catch (err) {
