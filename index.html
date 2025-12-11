@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>33⅓</title>
+  <title>33anda3rd</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * { box-sizing: border-box; }
@@ -84,7 +84,7 @@
   <h1>33⅓</h1>
   <p>
     Take a photo of the record label so it fills most of the frame, then let the app
-    crop and read it.
+    crop and read it. We’ll search Discogs via Google (<code>site:discogs.com</code>).
   </p>
 
   <div class="uploader">
@@ -200,24 +200,24 @@
       runOCR(dataUrl);
     }
 
-    // Build a cleaner Discogs search query from noisy OCR text
+    // Build a cleaner search query from noisy OCR text
     function buildSearchQuery(rawText) {
       if (!rawText) return "";
 
-      // 1. Flatten whitespace
+      // Flatten whitespace
       let text = rawText.replace(/\s+/g, " ");
 
-      // 2. Split into tokens and strip punctuation around them
+      // Split and strip punctuation
       let rawTokens = text.split(" ").map(t =>
-        t.replace(/[^A-Za-z0-9]/g, "")
+        t.replace(/[^A-Za-z0-9']/g, "") // keep apostrophes inside words
       );
 
-      // 3. Filter out junky tokens
+      // Stopwords to ignore
       const stopwords = new Set([
         "WITH","AND","THE","OF","INC","LTD","SIDE","HIGH","FIDELITY",
         "STEREO","MONO","RECORDS","RECORD","COMPANY","LIMITED",
         "STEREOPHONIC","LONG","PLAY","MICROGROOVE","MADE","IN",
-        "NEW","YORK","N","J","USA"
+        "NEW","YORK","N","J","USA","ALBUM"
       ]);
 
       const cleanTokens = [];
@@ -230,19 +230,16 @@
         // too short?
         if (upper.length < 3) continue;
 
-        // all digits and short? probably junk track number
+        // all digits and short? probably track/time
         if (/^\d+$/.test(upper) && upper.length < 4) continue;
 
-        // de-dupe
         if (seen.has(upper)) continue;
-
-        // skip stop words
         if (stopwords.has(upper)) continue;
 
         seen.add(upper);
         cleanTokens.push(tok);
 
-        if (cleanTokens.length >= 12) break; // keep query tight
+        if (cleanTokens.length >= 12) break; // keep query manageable
       }
 
       return cleanTokens.join(" ");
@@ -263,13 +260,16 @@
 
         const query = buildSearchQuery(raw);
         if (query) {
-          queryPreview.textContent = "Search query: " + query;
-          const url = "https://www.discogs.com/search/?q=" +
-                      encodeURIComponent(query) +
-                      "&type=all";
+          // Google search limited to Discogs
+          const googleQuery = "site:discogs.com " + query;
+          queryPreview.textContent = "Google query: " + googleQuery;
+
+          const url = "https://www.google.com/search?q=" +
+                      encodeURIComponent(googleQuery);
           discogsLink.innerHTML =
-            'Discogs search: <a href="' + url + '" target="_blank">' + url + "</a>";
-          statusText.textContent = "OCR complete. Tap the link to search Discogs.";
+            'Discogs via Google: <a href="' + url + '" target="_blank">' + url + "</a>";
+
+          statusText.textContent = "OCR complete. Tap the link to search Discogs via Google.";
         } else {
           statusText.textContent =
             "OCR ran, but no good words were found. Try another photo with the label closer and less glare.";
