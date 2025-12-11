@@ -1,95 +1,246 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Label Capture POC</title>
+  <title>33⅓ & ⅓ – Label Capture POC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: sans-serif; margin: 1rem; }
-    video, canvas { max-width: 100%; border: 1px solid #ccc; }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 1rem;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f7f7;
+      color: #111;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      font-size: 1.1rem;
+      margin: 1rem 0 0.4rem;
+    }
+    p {
+      margin: 0.25rem 0 0.5rem;
+    }
+    .camera-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    video {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
     #overlay {
       position: absolute;
       border-radius: 50%;
-      border: 2px dashed rgba(255,255,255,0.8);
+      border: 2px dashed rgba(255, 255, 255, 0.9);
       pointer-events: none;
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      margin: 0.75rem 0 0;
+    }
+    button {
+      border-radius: 999px;
+      border: none;
+      padding: 0.5rem 1.1rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: #111;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+    button:active {
+      transform: translateY(1px);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+    canvas {
+      width: 100%;
+      max-width: 480px;
+      display: block;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      background: #000;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-family: Menlo, Monaco, Consolas, "SF Mono", monospace;
+      background: #fff;
+      padding: 0.75rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+      font-size: 0.8rem;
+      max-height: 220px;
+      overflow: auto;
+    }
+    a {
+      color: #0055ff;
+      word-break: break-all;
+    }
+    .status {
+      font-size: 0.8rem;
+      color: #555;
+      margin-top: 0.25rem;
     }
   </style>
 </head>
 <body>
-  <h1>Record Label Capture (POC)</h1>
+  <h1>33⅓ & ⅓ – Label Capture</h1>
+  <p>Aim the record label inside the circle and tap <strong>Capture Label</strong>.</p>
 
-  <div style="position:relative; display:inline-block;">
+  <div class="camera-wrapper">
     <video id="video" autoplay playsinline></video>
-    <!-- simple circular overlay to aim the label -->
     <div id="overlay"></div>
   </div>
 
-  <br />
-  <button id="captureBtn">Capture Label</button>
+  <div class="controls">
+    <button id="captureBtn">Capture Label</button>
+  </div>
 
   <h2>Captured Frame</h2>
   <canvas id="canvas"></canvas>
 
   <h2>OCR Result</h2>
+  <div class="status" id="statusText">Waiting for capture…</div>
   <pre id="ocrText"></pre>
   <p id="discogsLink"></p>
 
-  <!-- Tesseract.js from a CDN -->
+  <!-- Tesseract.js -->
   <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const captureBtn = document.getElementById('captureBtn');
-    const ocrText = document.getElementById('ocrText');
-    const discogsLink = document.getElementById('discogsLink');
-    const overlay = document.getElementById('overlay');
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const captureBtn = document.getElementById("captureBtn");
+    const ocrText = document.getElementById("ocrText");
+    const discogsLink = document.getElementById("discogsLink");
+    const statusText = document.getElementById("statusText");
+    const overlay = document.getElementById("overlay");
 
     // Start camera
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(stream => {
-        video.srcObject = stream;
-        video.addEventListener('loadedmetadata', () => {
-          // size overlay to be roughly label-sized
-          const size = Math.min(video.videoWidth, video.videoHeight) * 0.6;
-          overlay.style.width = size + 'px';
-          overlay.style.height = size + 'px';
-          overlay.style.left = (video.offsetWidth - size) / 2 + 'px';
-          overlay.style.top = (video.offsetHeight - size) / 2 + 'px';
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
         });
-      })
-      .catch(err => console.error('Camera error:', err));
-
-    captureBtn.addEventListener('click', async () => {
-      const w = video.videoWidth;
-      const h = video.videoHeight;
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, w, h);
-
-      // run OCR on full frame (POC – later you’d crop to overlay region)
-      const dataUrl = canvas.toDataURL('image/png');
-
-      ocrText.textContent = 'Reading…';
-      discogsLink.textContent = '';
-
-      const { data } = await Tesseract.recognize(dataUrl, 'eng', {
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-/'
-      });
-      const text = data.text;
-      ocrText.textContent = text;
-
-      // super naive catalog guess: longest token with digits
-      const tokens = text.split(/\s+/);
-      let best = '';
-      for (const t of tokens) {
-        if (/\d/.test(t) && t.length > best.length) best = t.replace(/[^A-Za-z0-9\-]/g, '');
+        video.srcObject = stream;
+      } catch (err) {
+        console.error("Camera error:", err);
+        statusText.textContent = "Camera error – allow camera access in your browser.";
       }
-      if (best) {
-        const query = encodeURIComponent(text);
-        const url = `https://www.discogs.com/search/?q=${query}&type=all`;
-        discogsLink.innerHTML = `Discogs search: <a href="${url}" target="_blank">${best}</a>`;
+    }
+
+    video.addEventListener("loadedmetadata", () => {
+      // Size overlay as ~60% of the short side of the video element
+      const rect = video.getBoundingClientRect();
+      const size = Math.min(rect.width, rect.height) * 0.6;
+      overlay.style.width = size + "px";
+      overlay.style.height = size + "px";
+      overlay.style.left = rect.left + (rect.width - size) / 2 + "px";
+      overlay.style.top = rect.top + (rect.height - size) / 2 + "px";
+
+      // Re-position on resize/rotation
+      window.addEventListener("resize", () => {
+        const r = video.getBoundingClientRect();
+        const s = Math.min(r.width, r.height) * 0.6;
+        overlay.style.width = s + "px";
+        overlay.style.height = s + "px";
+        overlay.style.left = r.left + (r.width - s) / 2 + "px";
+        overlay.style.top = r.top + (r.height - s) / 2 + "px";
+      });
+    });
+
+    captureBtn.addEventListener("click", async () => {
+      if (!video.videoWidth) return;
+
+      statusText.textContent = "Capturing frame…";
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      // Draw full video frame into main canvas
+      canvas.width = vw;
+      canvas.height = vh;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, vw, vh);
+
+      // Crop to center square (~label area)
+      const labelSize = Math.min(vw, vh) * 0.6;
+      const x = (vw - labelSize) / 2;
+      const y = (vh - labelSize) / 2;
+
+      const labelCanvas = document.createElement("canvas");
+      labelCanvas.width = labelSize;
+      labelCanvas.height = labelSize;
+      const lctx = labelCanvas.getContext("2d");
+      lctx.drawImage(canvas, x, y, labelSize, labelSize, 0, 0, labelSize, labelSize);
+
+      // Grayscale + simple contrast boost
+      const imgData = lctx.getImageData(0, 0, labelSize, labelSize);
+      const pixels = imgData.data;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        let gray = 0.3 * r + 0.59 * g + 0.11 * b;
+
+        // naive contrast curve: darks slightly darker, lights a bit brighter
+        gray = gray < 110 ? gray * 0.8 : Math.min(255, gray * 1.25);
+
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = gray;
+      }
+      lctx.putImageData(imgData, 0, 0);
+
+      // Show the cropped label in the main canvas so you see what OCR sees
+      canvas.width = labelSize;
+      canvas.height = labelSize;
+      const showCtx = canvas.getContext("2d");
+      showCtx.drawImage(labelCanvas, 0, 0);
+
+      const dataUrl = labelCanvas.toDataURL("image/png");
+
+      statusText.textContent = "Running OCR… this may take a few seconds.";
+      ocrText.textContent = "";
+      discogsLink.textContent = "";
+
+      try {
+        const { data } = await Tesseract.recognize(dataUrl, "eng", {
+          tessedit_char_whitelist:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-./()&,:;'"
+        });
+
+        const text = (data.text || "").trim();
+        ocrText.textContent = text || "[no text detected]";
+
+        // Super-naive Discogs search: use all text as query
+        if (text) {
+          const query = encodeURIComponent(text.replace(/\s+/g, " "));
+          const url = `https://www.discogs.com/search/?q=${query}&type=all`;
+          discogsLink.innerHTML = `Discogs search: <a href="${url}" target="_blank">${url}</a>`;
+          statusText.textContent = "OCR complete. Tap the link to search Discogs.";
+        } else {
+          statusText.textContent = "No readable text found. Try again a bit closer or with less glare.";
+        }
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "OCR error. Try capturing again.";
       }
     });
+
+    startCamera();
   </script>
 </body>
 </html>
