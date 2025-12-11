@@ -17,18 +17,50 @@ async function googleSearch(query, apiKey) {
   return res.json();
 }
 
-function pickDiscogsResult(organic) {
+// Normal: look in organic_results for a Discogs hit
+function pickDiscogsOrganic(organic) {
   if (!organic || !Array.isArray(organic)) return null;
-  return organic.find(
-    (r) => r.link && r.link.includes("discogs.com")
-  );
+  return organic.find((r) => {
+    const link = r.link || "";
+    const displayed = r.displayed_link || "";
+    const source = r.source || "";
+    return (
+      /discogs\.com/i.test(link) ||
+      /discogs\.com/i.test(displayed) ||
+      /discogs/i.test(source)
+    );
+  });
+}
+
+// Fallback: if organic scan fails, scan the *entire* SERP JSON string
+// for the first discogs.com URL and wrap it in a result-like object.
+function pickDiscogsFromAny(serp, debugInfo, prefix) {
+  if (!serp) return null;
+
+  const organic = serp.organic_results || [];
+  const organicHit = pickDiscogsOrganic(organic);
+  if (organicHit) {
+    debugInfo[`${prefix}DiscogsSource`] = "organic_results";
+    return organicHit;
+  }
+
+  const text = JSON.stringify(serp);
+  const match = text.match(/https?:\/\/[^"\\]*discogs\.com[^"\\]*/i);
+  if (match) {
+    const url = match[0];
+    debugInfo[`${prefix}DiscogsSource`] = "json_scan";
+    debugInfo[`${prefix}DiscogsUrlFromScan`] = url;
+    return { link: url, title: null, thumbnail: null };
+  }
+
+  return null;
 }
 
 // First non-Discogs organic result – used as a "hint" (e.g., eBay)
 function pickHintResult(organic) {
   if (!organic || !Array.isArray(organic)) return null;
   return organic.find(
-    (r) => r.link && !r.link.includes("discogs.com")
+    (r) => r.link && !/discogs\.com/i.test(r.link)
   );
 }
 
@@ -94,14 +126,15 @@ exports.handler = async (event, context) => {
     let discogsUrl = null;
     let title = null;
     let coverImage = null;
-    let debugInfo = {};
+    const debugInfo = {};
 
     // 1) First pass: restrict to Discogs
     let serp = await googleSearch(primaryGoogleQuery, apiKey);
-    let organic = serp.organic_results || [];
-    debugInfo.primaryOrganicCount = organic.length;
+    debugInfo.primaryQuery = primaryGoogleQuery;
+    debugInfo.primaryHasOrganic =
+      !!serp.organic_results && serp.organic_results.length;
 
-    let chosen = pickDiscogsResult(organic);
+    let chosen = pickDiscogsFromAny(serp, debugInfo, "primary");
 
     // 2) Fallback: general Google search (no site: filter)
     if (!chosen) {
@@ -110,15 +143,15 @@ exports.handler = async (event, context) => {
       debugInfo.fallbackGoogleQuery = fallbackGoogleQuery;
 
       const serp2 = await googleSearch(fallbackGoogleQuery, apiKey);
-      const organic2 = serp2.organic_results || [];
-      debugInfo.fallbackOrganicCount = organic2.length;
+      debugInfo.fallbackHasOrganic =
+        !!serp2.organic_results && serp2.organic_results.length;
 
-      chosen = pickDiscogsResult(organic2);
-      organic = organic2;
+      chosen = pickDiscogsFromAny(serp2, debugInfo, "fallback");
 
       // 2b) Still nothing from Discogs – use top non-Discogs result
       //     as a hint (e.g., eBay title), then re-search Discogs.
       if (!chosen) {
+        const organic2 = serp2.organic_results || [];
         const hint = pickHintResult(organic2);
         debugInfo.hintTitle = hint ? hint.title : null;
         debugInfo.hintLink = hint ? hint.link : null;
@@ -132,14 +165,17 @@ exports.handler = async (event, context) => {
             debugInfo.hintDiscogsQuery = hintDiscogsQuery;
 
             const serp3 = await googleSearch(hintDiscogsQuery, apiKey);
-            const organic3 = serp3.organic_results || [];
-            debugInfo.hintOrganicCount = organic3.length;
+            debugInfo.hintHasOrganic =
+              !!serp3.organic_results && serp3.organic_results.length;
 
-            const hintChosen = pickDiscogsResult(organic3);
+            const hintChosen = pickDiscogsFromAny(
+              serp3,
+              debugInfo,
+              "hint"
+            );
             if (hintChosen) {
               chosen = hintChosen;
-              organic = organic3;
-              searchSource = "hint"; // mark that we used the hint flow
+              searchSource = "hint";
             }
           }
         }
@@ -210,7 +246,7 @@ exports.handler = async (event, context) => {
         discogsUrl,
         title,
         coverImage,
-        debug: debugInfo, // keep for now; remove if you don't want it in the client
+        debug: debugInfo, // keep for now; remove later if you want
       }),
     };
   } catch (err) {
