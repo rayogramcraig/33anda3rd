@@ -21,8 +21,12 @@
 
     body {
       font-family: var(--font-main);
-      background: #d9c4a8;
       color: #000;
+      background-color: #d9c4a8; /* fallback */
+      background-image: url("maple.png");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
     }
 
     .app {
@@ -32,7 +36,7 @@
       overflow: hidden;
       border-radius: 0;
       box-shadow: none;
-      background: url("maple.png") center/cover no-repeat fixed;
+      background: transparent; /* let the wood show through */
     }
 
     .screen {
@@ -186,7 +190,7 @@
       animation: spin 1.4s linear infinite;
     }
 
-    /* make sure the label texture fills the circle on processing screen */
+    /* label texture on processing record */
     .screen-processing .record-label {
       background-size: cover;
       background-position: center;
@@ -228,6 +232,7 @@
       object-fit: cover;
       display: block;
     }
+
     .album-label-circle {
       position: absolute;
       left: 50%;
@@ -236,10 +241,10 @@
       padding-bottom: 46%;
       transform: translate(-50%, -50%);
       border-radius: 50%;
-      background: radial-gradient(
-        circle at 30% 30%,
-        #ffcc66 3%, #ff3b00 55%, #b90000 75%, #600000 100%
-      );
+      /* label from photo will be dropped in here */
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
       box-shadow: var(--shadow-strong);
     }
     .album-label-circle::before {
@@ -563,7 +568,6 @@
           <div class="overlay-body">
             <div class="meta-line" id="statusText">Waiting for a photo…</div>
             <div class="meta-line" id="matchStatus"></div>
-            <!-- NEW: line that shows the actual Google query you can copy -->
             <div class="meta-line" id="googleQueryLine"></div>
             <div class="meta-line" id="cleanQueryLine"></div>
 
@@ -609,10 +613,11 @@
     const overlay = document.getElementById("resultsOverlay");
     const overlayClose = document.getElementById("overlayClose");
 
-    // processing-screen label element (for the photographed label texture)
+    // elements that get the label texture
     const processingRecordLabel = document.querySelector(
       ".screen-processing .record-label"
     );
+    const albumLabelCircle = document.querySelector(".album-label-circle");
 
     let currentDiscogsUrl = "";
     let currentGoogleQuery = "";
@@ -624,10 +629,13 @@
       app.classList.remove("show-results");
       app.classList.remove("show-processing");
 
-      // reset processing label texture
+      // reset label textures
       if (processingRecordLabel) {
         processingRecordLabel.style.backgroundImage = "";
         processingRecordLabel.style.backgroundColor = "#fff";
+      }
+      if (albumLabelCircle) {
+        albumLabelCircle.style.backgroundImage = "";
       }
 
       fileInput.value = "";
@@ -651,10 +659,13 @@
       currentGoogleQuery = "";
       discogsCover.src = "";
 
-      // reset processing label texture
+      // reset label textures
       if (processingRecordLabel) {
         processingRecordLabel.style.backgroundImage = "";
         processingRecordLabel.style.backgroundColor = "#fff";
+      }
+      if (albumLabelCircle) {
+        albumLabelCircle.style.backgroundImage = "";
       }
 
       const reader = new FileReader();
@@ -677,12 +688,15 @@
       // Draw the cropped, COLOR square first
       ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
 
-      // Use that crop as the label texture on the processing record
+      // Use that crop as the label texture on both records
       try {
         const labelDataUrl = canvas.toDataURL("image/png");
         if (processingRecordLabel) {
           processingRecordLabel.style.backgroundImage = `url(${labelDataUrl})`;
           processingRecordLabel.style.backgroundColor = "transparent";
+        }
+        if (albumLabelCircle) {
+          albumLabelCircle.style.backgroundImage = `url(${labelDataUrl})`;
         }
       } catch (e) {
         console.error("Error creating label data URL", e);
@@ -759,7 +773,6 @@
           ? "Cleaned query: " + cleanQuery
           : "Cleaned query: (nothing usable found)";
 
-        // Show the exact Google query we feed to SerpAPI
         if (cleanQuery) {
           const gq = `site:discogs.com ${cleanQuery}`;
           currentGoogleQuery = gq;
@@ -799,7 +812,6 @@
 
         const result = await res.json();
 
-        // if backend gives a more precise query, show that instead
         if (result.primaryGoogleQuery) {
           currentGoogleQuery = result.primaryGoogleQuery;
           googleQueryLine.textContent =
