@@ -1,604 +1,864 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>33⅓rd – Shoot the Label</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-:root {
-  --accent-red: #d40000;
-  --accent-yellow: #ffe400;
-  --text-main: #ffffff;
-  --shadow-strong: 0 18px 30px rgba(0,0,0,0.45);
-  --shadow-soft: 0 8px 18px rgba(0,0,0,0.35);
-  --font-main: system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-}
+  <meta charset="UTF-8" />
+  <title>33⅓ – Label Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+  <!-- Tesseract.js for OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-}
+  <style>
+    :root {
+      --accent-red: #d40000;
+      --accent-yellow: #ffe400;
+      --text-main: #ffffff;
+      --shadow-strong: 0 18px 30px rgba(0, 0, 0, 0.45);
+      --shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.35);
+      --font-main: system-ui, -apple-system, BlinkMacSystemFont,
+        "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    }
 
-body {
-  font-family: var(--font-main);
-  background: #d9c4a8 url("maple.png") center/cover no-repeat fixed;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-}
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
 
-/* APP FRAME (phone-ish) */
-.app {
-  position: relative;
-  width: 100%;
-  max-width: 430px;
-  height: 100vh;
-  max-height: 920px;
-  overflow: hidden;
-  border-radius: 32px;
-  box-shadow: 0 22px 40px rgba(0,0,0,0.6);
-  background: url("maple.png") center/cover no-repeat;
-  color: #000;
-}
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
 
-/* SHARED SCREEN BASE */
-.screen {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 56px 24px 28px;
-  transition: opacity 220ms ease-out, transform 220ms ease-out;
-}
+    body {
+      font-family: var(--font-main);
+      background: #d9c4a8 url("maple.png") center/cover no-repeat fixed;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      color: #000;
+    }
 
-.screen-default {
-  opacity: 1;
-  transform: translateX(0);
-}
+    /* APP FRAME (phone-ish) */
+    .app {
+      position: relative;
+      width: 100%;
+      max-width: 430px;
+      height: 100vh;
+      max-height: 920px;
+      overflow: hidden;
+      border-radius: 32px;
+      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.6);
+      background: url("maple.png") center/cover no-repeat;
+    }
 
-.screen-results {
-  opacity: 0;
-  transform: translateX(100%);
-  pointer-events: none;
-}
+    /* Screens */
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 56px 24px 28px;
+      transition: opacity 220ms ease-out, transform 220ms ease-out;
+    }
 
-.app.show-results .screen-default {
-  opacity: 0;
-  transform: translateX(-100%);
-  pointer-events: none;
-}
+    .screen-default {
+      opacity: 1;
+      transform: translateX(0);
+    }
 
-.app.show-results .screen-results {
-  opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
-}
+    .screen-results {
+      opacity: 0;
+      transform: translateX(100%);
+      pointer-events: none;
+      padding: 0;
+    }
 
-/* DEFAULT SCREEN – “SHOOT THE LABEL” */
-.screen-default h1 {
-  margin: 0 0 40px;
-  font-size: 28px;
-  letter-spacing: 0.03em;
-  font-weight: 700;
-  text-align: center;
-}
+    .app.show-results .screen-default {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
 
-/* Wrapper so tapping anywhere feels like a shutter */
-.capture-hit-area {
-  position: absolute;
-  inset: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-}
+    .app.show-results .screen-results {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
 
-/* Record & label */
-.record-wrapper {
-  position: relative;
-  width: 76%;
-  max-width: 320px;
-  margin-top: 20px;
-}
+    /* DEFAULT SCREEN – “shoot the label” */
 
-.record {
-  position: relative;
-  width: 100%;
-  padding-bottom: 58%; /* ellipse */
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse at 30% 28%, #777 0%, #222 55%, #020202 100%);
-  transform: rotate(-18deg);
-  box-shadow: var(--shadow-soft);
-}
+    .screen-default h1 {
+      margin: 0 0 40px;
+      font-size: 28px;
+      letter-spacing: 0.03em;
+      font-weight: 700;
+      text-align: center;
+    }
 
-/* subtle side highlight */
-.record::before {
-  content: "";
-  position: absolute;
-  inset: 12% 8%;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0));
-  opacity: 0.55;
-  mix-blend-mode: screen;
-}
+    .record-wrapper {
+      position: relative;
+      width: 76%;
+      max-width: 320px;
+      margin-top: 20px;
+    }
 
-/* white label in center */
-.record-label {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 34%;
-  height: 34%;
-  transform: translate(-50%, -50%) rotate(18deg);
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
-}
+    .record {
+      position: relative;
+      width: 100%;
+      padding-bottom: 58%; /* ellipse */
+      border-radius: 50%;
+      background: radial-gradient(
+        ellipse at 30% 28%,
+        #777 0%,
+        #222 55%,
+        #020202 100%
+      );
+      transform: rotate(-18deg);
+      box-shadow: var(--shadow-soft);
+    }
 
-/* spindle hole */
-.record-label::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  margin-left: -3px;
-  border-radius: 50%;
-  background: #000;
-}
+    .record::before {
+      content: "";
+      position: absolute;
+      inset: 12% 8%;
+      border-radius: 50%;
+      background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.22),
+        rgba(255, 255, 255, 0)
+      );
+      opacity: 0.55;
+      mix-blend-mode: screen;
+    }
 
-/* yellow targeting beams */
-.label-beam {
-  position: absolute;
-  top: -110px;
-  left: 50%;
-  width: 3px;
-  height: 150px;
-  background: var(--accent-yellow);
-  transform-origin: top center;
-  border-radius: 999px;
-}
+    .record-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 34%;
+      height: 34%;
+      transform: translate(-50%, -50%) rotate(-0deg);
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    }
 
-.label-beam.left {
-  transform: translateX(-50%) rotate(-8deg);
-}
+    .record-label::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      margin-top: -3px;
+      margin-left: -3px;
+      border-radius: 50%;
+      background: #000;
+    }
 
-.label-beam.right {
-  transform: translateX(-50%) rotate(8deg);
-}
+    .label-beam {
+      position: absolute;
+      top: -110px;
+      left: 50%;
+      width: 3px;
+      height: 150px;
+      background: var(--accent-yellow);
+      transform-origin: top center;
+      border-radius: 999px;
+	  visibility:hidden;
+    }
 
-/* RESULTS SCREEN */
-.screen-results {
-  padding: 0;
-  color: #fff;
-}
+    .label-beam.left {
+      transform: translateX(-50%) rotate(-8deg);
+    }
 
-/* Top area: album art with overlaid circular label */
-.results-top {
-  position: relative;
-  flex: 0 0 56%;
-  width: 100%;
-  overflow: hidden;
-}
+    .label-beam.right {
+      transform: translateX(-50%) rotate(8deg);
+    }
 
-/* album art “slot” – you can later set a background-image on this */
-.album-art {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(to bottom, rgba(0,0,0,0.02), rgba(0,0,0,0.35)),
-    #e0e0e0;
-  background-size: cover;
-  background-position: center;
-}
+    /* full-screen tap target */
+    .capture-hit-area {
+      position: absolute;
+      inset: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+    }
 
-/* circular label in front of cover */
-.album-label-circle {
-  position: absolute;
-  left: 50%;
-  top: 52%;
-  width: 46%;
-  padding-bottom: 46%;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 30%, #ffcc66 3%, #ff3b00 55%, #b90000 75%, #600000 100%);
-  box-shadow: var(--shadow-strong);
-}
+    /* RESULTS SCREEN */
 
-/* inner rim */
-.album-label-circle::before {
-  content: "";
-  position: absolute;
-  inset: 10%;
-  border-radius: 50%;
-  border: 3px solid rgba(255,220,150,0.8);
-}
+    .results-top {
+      position: relative;
+      flex: 0 0 56%;
+      width: 100%;
+      overflow: hidden;
+    }
 
-/* tiny spindle dot */
-.album-label-circle::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  margin-left: -4px;
-  margin-top: -4px;
-  border-radius: 50%;
-  background: #111;
-}
+    .album-art {
+      position: absolute;
+      inset: 0;
+      background: #e0e0e0;
+    }
 
-/* Bottom panel (red gradient over maple) */
-.results-bottom {
-  position: relative;
-  flex: 1;
-  width: 100%;
-  background:
-    linear-gradient(to bottom, rgba(180,0,0,0.95) 0%, rgba(190,0,0,0.95) 48%, rgba(190,0,0,0.4) 80%, rgba(190,0,0,0.0) 100%),
-    url("maple.png") center/cover no-repeat;
-  padding: 24px 24px 26px;
-}
+    .album-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
 
-/* album title / artist */
-.album-meta {
-  padding-right: 32%;
-}
+    .album-label-circle {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: 46%;
+      padding-bottom: 46%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(
+        circle at 30% 30%,
+        #ffcc66 3%,
+        #ff3b00 55%,
+        #b90000 75%,
+        #600000 100%
+      );
+      box-shadow: var(--shadow-strong);
+    }
 
-.album-meta h2,
-.album-meta h3 {
-  margin: 0;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
+    .album-label-circle::before {
+      content: "";
+      position: absolute;
+      inset: 10%;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 220, 150, 0.8);
+    }
 
-.album-meta h2 {
-  font-size: 24px;
-  line-height: 1.1;
-  margin-bottom: 10px;
-}
+    .album-label-circle::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-left: -4px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: #111;
+    }
 
-.album-meta h3 {
-  font-size: 24px;
-  line-height: 1.1;
-}
+    .results-bottom {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      background: linear-gradient(
+          to bottom,
+          rgba(180, 0, 0, 0.95) 0%,
+          rgba(190, 0, 0, 0.95) 48%,
+          rgba(190, 0, 0, 0.4) 80%,
+          rgba(190, 0, 0, 0) 100%
+        ),
+        url("maple.png") center/cover no-repeat;
+      padding: 24px 24px 26px;
+      color: #fff;
+    }
 
-/* Info button (white circle with italic i) */
-.info-button {
-  position: absolute;
-  left: 24px;
-  bottom: 104px;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  border: none;
-  background: #ffffff;
-  color: var(--accent-red);
-  font-style: italic;
-  font-size: 34px;
-  line-height: 64px;
-  text-align: center;
-  box-shadow: var(--shadow-soft);
-  cursor: pointer;
-}
+    .album-meta {
+      padding-right: 32%;
+    }
 
-/* Mini record button (retake) bottom left */
-.retake-button {
-  position: absolute;
-  left: 24px;
-  bottom: 18px;
-  border: none;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-}
+    .album-meta h2,
+    .album-meta h3 {
+      margin: 0;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
 
-.mini-record {
-  position: relative;
-  width: 120px;
-  padding-bottom: 68px;
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse at 30% 30%, #777 0%, #222 55%, #020202 100%);
-  transform: rotate(-16deg);
-  box-shadow: var(--shadow-soft);
-}
+    .album-meta h2 {
+      font-size: 24px;
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
 
-.mini-record::before {
-  content: "";
-  position: absolute;
-  inset: 12% 10%;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
-  opacity: 0.6;
-}
+    .album-meta h3 {
+      font-size: 24px;
+      line-height: 1.1;
+    }
 
-.mini-label {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 35%;
-  height: 35%;
-  transform: translate(-50%, -50%) rotate(16deg);
-  border-radius: 50%;
-  background: #fff;
-}
+    .info-button {
+      position: absolute;
+      left: 24px;
+      bottom: 104px;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: none;
+      background: #ffffff;
+      color: var(--accent-red);
+      font-style: italic;
+      font-size: 34px;
+      line-height: 64px;
+      text-align: center;
+      box-shadow: var(--shadow-soft);
+      cursor: pointer;
+    }
 
-.mini-label::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  margin-left: -2.5px;
-  margin-top: -2.5px;
-  border-radius: 50%;
-  background: #000;
-}
+    .retake-button {
+      position: absolute;
+      left: 24px;
+      bottom: 18px;
+      border: none;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
 
-/* Discogs pill button */
-.discogs-button {
-  position: absolute;
-  right: 24px;
-  bottom: 26px;
-  border: none;
-  border-radius: 999px;
-  padding: 14px 26px 14px 24px;
-  background: #ffffff;
-  color: var(--accent-red);
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 0.04em;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  box-shadow: var(--shadow-soft);
-}
+    .mini-record {
+      position: relative;
+      width: 120px;
+      padding-bottom: 68px;
+      border-radius: 50%;
+      background: radial-gradient(
+        ellipse at 30% 30%,
+        #777 0%,
+        #222 55%,
+        #020202 100%
+      );
+      transform: rotate(-16deg);
+      box-shadow: var(--shadow-soft);
+    }
 
-.discogs-button .play-icon {
-  display: inline-block;
-  width: 0;
-  height: 0;
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
-  border-left: 12px solid var(--accent-red);
-}
+    .mini-record::before {
+      content: "";
+      position: absolute;
+      inset: 12% 10%;
+      border-radius: 50%;
+      background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+      opacity: 0.6;
+    }
 
-/* INFO OVERLAY */
-.results-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.55);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 22px;
-}
+    .mini-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 35%;
+      height: 35%;
+      transform: translate(-50%, -50%) rotate(16deg);
+      border-radius: 50%;
+      background: #fff;
+    }
 
-.results-overlay.open {
-  display: flex;
-}
+    .mini-label::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      margin-left: -2.5px;
+      margin-top: -2.5px;
+      border-radius: 50%;
+      background: #000;
+    }
 
-.overlay-card {
-  width: 100%;
-  max-width: 360px;
-  background: #ffffff;
-  color: #222;
-  border-radius: 22px;
-  padding: 18px 18px 16px;
-  box-shadow: 0 18px 35px rgba(0,0,0,0.5);
-}
+    .discogs-button {
+      position: absolute;
+      right: 24px;
+      bottom: 26px;
+      border: none;
+      border-radius: 999px;
+      padding: 14px 26px 14px 24px;
+      background: #ffffff;
+      color: var(--accent-red);
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: 0.04em;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      box-shadow: var(--shadow-soft);
+    }
 
-.overlay-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
+    .discogs-button .play-icon {
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 12px solid var(--accent-red);
+    }
 
-.overlay-card-header h4 {
-  margin: 0;
-  font-size: 16px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
+    /* INFO OVERLAY */
 
-.overlay-close {
-  border: none;
-  background: transparent;
-  font-size: 22px;
-  cursor: pointer;
-}
+    .results-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 22px;
+      color: #222;
+    }
 
-.overlay-body {
-  font-size: 14px;
-  line-height: 1.35;
-}
+    .results-overlay.open {
+      display: flex;
+    }
 
-.overlay-body dl {
-  margin: 0 0 10px;
-}
+    .overlay-card {
+      width: 100%;
+      max-width: 360px;
+      background: #ffffff;
+      border-radius: 22px;
+      padding: 18px 18px 16px;
+      box-shadow: 0 18px 35px rgba(0, 0, 0, 0.5);
+      font-size: 14px;
+    }
 
-.overlay-body dt {
-  font-weight: 600;
-}
+    .overlay-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
 
-.overlay-body dd {
-  margin: 0 0 6px;
-}
+    .overlay-card-header h4 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
 
-.overlay-discogs {
-  margin-top: 10px;
-  display: flex;
-  justify-content: flex-end;
-}
+    .overlay-close {
+      border: none;
+      background: transparent;
+      font-size: 22px;
+      cursor: pointer;
+    }
 
-.overlay-discogs button {
-  border: none;
-  border-radius: 999px;
-  padding: 8px 18px;
-  font-size: 14px;
-  background: var(--accent-red);
-  color: #fff;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
+    .overlay-body {
+      font-size: 13px;
+      line-height: 1.35;
+      max-height: 280px;
+      overflow-y: auto;
+    }
 
-.overlay-discogs .play-icon {
-  display: inline-block;
-  width: 0;
-  height: 0;
-  border-top: 6px solid transparent;
-  border-bottom: 6px solid transparent;
-  border-left: 9px solid #fff;
-}
+    .overlay-body .meta-line {
+      margin-top: 4px;
+    }
 
-/* Small devices tweaks */
-@media (max-height: 720px) {
-  .screen {
-    padding-top: 42px;
-  }
-  .screen-default h1 {
-    margin-bottom: 26px;
-    font-size: 24px;
-  }
-  .results-bottom {
-    padding-bottom: 18px;
-  }
-  .info-button {
-    bottom: 94px;
-  }
-}
-</style>
+    .overlay-label {
+      margin-top: 10px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .overlay-ocr {
+      white-space: pre-wrap;
+      font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      background: #f5f5f5;
+      border-radius: 10px;
+      padding: 8px;
+      margin-top: 4px;
+    }
+
+    .overlay-discogs {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .overlay-discogs button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-size: 14px;
+      background: var(--accent-red);
+      color: #fff;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .overlay-discogs .play-icon {
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 9px solid #fff;
+    }
+
+    .meta-line {
+      font-size: 12px;
+      color: #555;
+    }
+
+    @media (max-height: 720px) {
+      .screen {
+        padding-top: 42px;
+      }
+      .screen-default h1 {
+        margin-bottom: 26px;
+        font-size: 24px;
+      }
+    }
+
+    /* Hidden canvas for OCR */
+    #labelCanvas {
+      display: none;
+    }
+  </style>
 </head>
+
 <body>
-<div class="app" id="app">
-  <!-- DEFAULT SCREEN -->
-  <section class="screen screen-default" aria-label="Shoot the label">
-    <h1>shoot the label</h1>
+  <div class="app" id="app">
+    <!-- hidden file input used by both screens -->
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/*"
+      capture="environment"
+      style="display: none"
+    />
 
-    <div class="record-wrapper">
-      <div class="record">
-        <div class="record-label"></div>
-      </div>
-      <div class="label-beam left"></div>
-      <div class="label-beam right"></div>
-    </div>
+    <!-- DEFAULT SCREEN -->
+    <section class="screen screen-default" aria-label="Shoot the label">
+      <h1>just the label</h1>
 
-    <!-- full-screen tap target (simulates taking the picture) -->
-    <button class="capture-hit-area" type="button" aria-label="Shoot the label"></button>
-  </section>
-
-  <!-- RESULTS SCREEN -->
-  <section class="screen screen-results" aria-label="Scan results">
-    <div class="results-top">
-      <div class="album-art" id="albumArt">
-        <!-- You can set a background-image here in your app logic -->
-      </div>
-      <div class="album-label-circle"></div>
-    </div>
-
-    <div class="results-bottom">
-      <div class="album-meta">
-        <h2>Miles Davis Sextet</h2>
-        <h3>Someday My Prince Will Come</h3>
+      <div class="record-wrapper">
+        <div class="record">
+          <div class="record-label"></div>
+        </div>
+        <div class="label-beam left"></div>
+        <div class="label-beam right"></div>
       </div>
 
-      <button class="info-button" type="button" aria-label="Show technical results">i</button>
+      <button
+        class="capture-hit-area"
+        type="button"
+        aria-label="Shoot the label"
+      ></button>
+    </section>
 
-      <button class="retake-button" type="button" aria-label="Shoot another label">
-        <div class="mini-record">
-          <div class="mini-label"></div>
+    <!-- RESULTS SCREEN -->
+    <section class="screen screen-results" aria-label="Scan results">
+      <div class="results-top">
+        <div class="album-art">
+          <img id="discogsCover" alt="Album cover" />
         </div>
-      </button>
+        <div class="album-label-circle"></div>
+      </div>
 
-      <button class="discogs-button" type="button" aria-label="Open release on Discogs">
-        <span class="play-icon" aria-hidden="true"></span>
-        <span>Discogs</span>
-      </button>
-    </div>
+      <div class="results-bottom">
+        <div class="album-meta">
+          <h2 id="albumArtist">Artist</h2>
+          <h3 id="albumTitle">Title</h3>
+        </div>
 
-    <!-- overlay with technical details -->
-    <div class="results-overlay" id="resultsOverlay" aria-hidden="true">
-      <div class="overlay-card">
-        <div class="overlay-card-header">
-          <h4>Scan details</h4>
-          <button class="overlay-close" type="button" aria-label="Close details">&times;</button>
-        </div>
-        <div class="overlay-body">
-          <dl>
-            <dt>Confidence</dt>
-            <dd>98% match</dd>
-            <dt>Catalog no.</dt>
-            <dd>CS 8456</dd>
-            <dt>Label</dt>
-            <dd>Columbia – 6-eye</dd>
-          </dl>
-          <p>Adjust this copy to show whatever technical fields you want from your label parser.</p>
-        </div>
-        <div class="overlay-discogs">
-          <button type="button">
-            <span class="play-icon" aria-hidden="true"></span>
-            <span>Open on Discogs</span>
-          </button>
+        <button
+          class="info-button"
+          type="button"
+          id="infoButton"
+          aria-label="Show technical results"
+        >
+          i
+        </button>
+
+        <button
+          class="retake-button"
+          type="button"
+          id="retakeButton"
+          aria-label="Shoot another label"
+        >
+          <div class="mini-record">
+            <div class="mini-label"></div>
+          </div>
+        </button>
+
+        <button
+          class="discogs-button"
+          type="button"
+          id="discogsButton"
+          aria-label="Open release on Discogs"
+        >
+          <span class="play-icon" aria-hidden="true"></span>
+          <span>Discogs</span>
+        </button>
+      </div>
+
+      <!-- overlay with technical details -->
+      <div class="results-overlay" id="resultsOverlay" aria-hidden="true">
+        <div class="overlay-card">
+          <div class="overlay-card-header">
+            <h4>Scan details</h4>
+            <button
+              class="overlay-close"
+              type="button"
+              id="overlayClose"
+              aria-label="Close details"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="overlay-body">
+            <div class="meta-line" id="statusText">Waiting for a photo…</div>
+            <div class="meta-line" id="matchStatus"></div>
+            <div class="meta-line" id="cleanQueryLine"></div>
+
+            <div class="overlay-label">OCR text</div>
+            <div class="overlay-ocr" id="ocrOutput"></div>
+          </div>
+          <div class="overlay-discogs">
+            <button type="button" id="overlayDiscogsButton">
+              <span class="play-icon" aria-hidden="true"></span>
+              <span>Open on Discogs</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
-</div>
+    </section>
 
-<script>
-/*
-  Minimal behavior just to demonstrate the two screens & overlay.
-  Replace these hooks with camera / Discogs logic as needed.
-*/
-const app = document.getElementById("app");
-const shootArea = document.querySelector(".capture-hit-area");
-const retakeButton = document.querySelector(".retake-button");
-const infoButton = document.querySelector(".info-button");
-const overlay = document.getElementById("resultsOverlay");
-const overlayClose = document.querySelector(".overlay-close");
+    <!-- Off-screen canvas used for OCR cropping/processing -->
+    <canvas id="labelCanvas"></canvas>
+  </div>
 
-shootArea.addEventListener("click", () => {
-  app.classList.add("show-results");
-});
+  <script>
+    const app = document.getElementById("app");
 
-retakeButton.addEventListener("click", () => {
-  app.classList.remove("show-results");
-});
+    const fileInput = document.getElementById("fileInput");
+    const captureHitArea = document.querySelector(".capture-hit-area");
+    const retakeButton = document.getElementById("retakeButton");
 
-infoButton.addEventListener("click", () => {
-  overlay.classList.add("open");
-  overlay.setAttribute("aria-hidden", "false");
-});
+    const canvas = document.getElementById("labelCanvas");
+    const ctx = canvas.getContext("2d");
 
-overlayClose.addEventListener("click", () => {
-  overlay.classList.remove("open");
-  overlay.setAttribute("aria-hidden", "true");
-});
+    const statusText = document.getElementById("statusText");
+    const matchStatus = document.getElementById("matchStatus");
+    const ocrOutput = document.getElementById("ocrOutput");
+    const cleanQueryLine = document.getElementById("cleanQueryLine");
 
-overlay.addEventListener("click", (e) => {
-  if (e.target === overlay) {
-    overlay.classList.remove("open");
-    overlay.setAttribute("aria-hidden", "true");
-  }
-});
-</script>
+    const discogsCover = document.getElementById("discogsCover");
+    const albumArtist = document.getElementById("albumArtist");
+    const albumTitle = document.getElementById("albumTitle");
+    const discogsButton = document.getElementById("discogsButton");
+    const overlayDiscogsButton = document.getElementById(
+      "overlayDiscogsButton"
+    );
+
+    const infoButton = document.getElementById("infoButton");
+    const overlay = document.getElementById("resultsOverlay");
+    const overlayClose = document.getElementById("overlayClose");
+
+    let currentDiscogsUrl = "";
+    let currentGoogleQuery = "";
+
+    // Tap anywhere on default screen (or mini record) to pick image
+    captureHitArea.addEventListener("click", () => fileInput.click());
+    retakeButton.addEventListener("click", () => {
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+      fileInput.click();
+    });
+
+    // File chosen
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+
+      matchStatus.textContent = "";
+      ocrOutput.textContent = "";
+      cleanQueryLine.textContent = "";
+      statusText.textContent = "Loading image…";
+      currentDiscogsUrl = "";
+      currentGoogleQuery = "";
+      discogsCover.src = "";
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          processImage(img);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function processImage(img) {
+      // Crop to center square where label lives
+      const size = Math.min(img.width, img.height);
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
+
+      canvas.width = size;
+      canvas.height = size;
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+
+      // Simple grayscale for OCR
+      const imageData = ctx.getImageData(0, 0, size, size);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        data[i] = data[i + 1] = data[i + 2] = gray;
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      statusText.textContent = "Running OCR…";
+      runOCR();
+    }
+
+    function buildCleanQuery(rawText) {
+      const lines = rawText.split(/\r?\n/);
+      const tokens = [];
+
+      for (let line of lines) {
+        line = line
+          .replace(/[^A-Za-z0-9'&()\- ]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!line) continue;
+
+        const words = line.split(" ");
+        const goodWords = words.filter((w) => {
+          if (!w) return false;
+          if (/^\d+$/.test(w)) return true;
+          return w.length > 2;
+        });
+
+        if (goodWords.length) {
+          tokens.push(...goodWords);
+        }
+      }
+
+      const seen = new Set();
+      const final = [];
+      for (let w of tokens) {
+        const key = w.toUpperCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          final.push(w);
+        }
+      }
+      return final.join(" ");
+    }
+
+    async function runOCR() {
+      try {
+        const { data } = await Tesseract.recognize(canvas, "eng", {
+          logger: (m) => {
+            if (m.status === "recognizing text" && m.progress) {
+              const pct = Math.round(m.progress * 100);
+              statusText.textContent = `Running OCR… ${pct}%`;
+            }
+          },
+        });
+
+        const text = data.text || "";
+        ocrOutput.textContent = text.trim();
+        statusText.textContent = "OCR complete. Trying to identify record…";
+
+        const cleanQuery = buildCleanQuery(text);
+        cleanQueryLine.textContent = cleanQuery
+          ? "Cleaned query: " + cleanQuery
+          : "Cleaned query: (nothing usable found)";
+        if (!cleanQuery) {
+          matchStatus.textContent =
+            "Not enough text to search. Try a clearer photo.";
+          return;
+        }
+
+        const res = await fetch(
+          "/.netlify/functions/discogsSearch?query=" +
+            encodeURIComponent(cleanQuery)
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          matchStatus.textContent = "Lookup error: " + res.status;
+          console.error("discogsSearch error:", errText);
+          return;
+        }
+
+        const result = await res.json();
+        matchStatus.textContent = "Match found (via Google + Discogs).";
+
+        const fullTitle = result.title || "";
+        let artist = "";
+        let title = "";
+
+        if (fullTitle.includes(" – ")) {
+          [artist, title] = fullTitle.split(" – ", 2);
+        } else if (fullTitle.includes(" - ")) {
+          [artist, title] = fullTitle.split(" - ", 2);
+        } else {
+          title = fullTitle;
+        }
+
+        albumArtist.textContent = artist || "Discogs match";
+        albumTitle.textContent = title || "(title unknown)";
+
+        currentDiscogsUrl = result.discogsUrl || "";
+        currentGoogleQuery =
+          result.primaryGoogleQuery || result.googleQuery || "";
+
+        if (result.coverImage) {
+          discogsCover.src = result.coverImage;
+        } else {
+          discogsCover.removeAttribute("src");
+        }
+
+        statusText.textContent = "Done.";
+        app.classList.add("show-results");
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "Error during OCR or lookup.";
+        matchStatus.textContent = "";
+      }
+    }
+
+    // Info overlay toggle
+    infoButton.addEventListener("click", () => {
+      overlay.classList.add("open");
+      overlay.setAttribute("aria-hidden", "false");
+    });
+
+    overlayClose.addEventListener("click", () => {
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+    });
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        overlay.classList.remove("open");
+        overlay.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    // Discogs buttons
+    function openDiscogs() {
+      if (!currentDiscogsUrl) return;
+      window.open(currentDiscogsUrl, "_blank", "noopener");
+    }
+
+    discogsButton.addEventListener("click", openDiscogs);
+    overlayDiscogsButton.addEventListener("click", openDiscogs);
+  </script>
 </body>
 </html>
