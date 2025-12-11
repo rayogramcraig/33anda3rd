@@ -20,7 +20,7 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // 1) Ask Google (via SerpAPI) for the top Discogs result
+    // 1) Ask Google (via SerpAPI) for Discogs results
     const googleQuery = `site:discogs.com ${query}`;
     const serpUrl =
       "https://serpapi.com/search?engine=google&q=" +
@@ -40,28 +40,37 @@ exports.handler = async (event, context) => {
         }),
       };
     }
-    const serp = await serpRes.json();
 
+    const serp = await serpRes.json();
     const organic = serp.organic_results || [];
-    const firstDiscogs = organic.find(
+
+    // Try to find an explicit Discogs link first
+    let chosen = organic.find(
       (r) => r.link && r.link.includes("discogs.com")
     );
 
-    if (!firstDiscogs) {
+    // Fallback: just use the first organic result if we have one at all
+    if (!chosen && organic.length > 0) {
+      chosen = organic[0];
+    }
+
+    if (!chosen || !chosen.link) {
+      // Truly nothing useful came back
       return {
         statusCode: 404,
         body: JSON.stringify({
-          error: "No Discogs result found",
+          error: "No Discogs result found in Google search",
           googleQuery,
+          debug: { organicCount: organic.length },
         }),
       };
     }
 
-    let discogsUrl = firstDiscogs.link;
-    let title = firstDiscogs.title || null;
-    let coverImage = firstDiscogs.thumbnail || null;
+    let discogsUrl = chosen.link;
+    let title = chosen.title || null;
+    let coverImage = chosen.thumbnail || null;
 
-    // 2) Try Discogs API to get better cover/title
+    // 2) Try Discogs API for better metadata / cover
     let discogsJson = null;
     const releaseMatch = discogsUrl.match(/\/release\/(\d+)/);
     const masterMatch = discogsUrl.match(/\/master\/(\d+)/);
