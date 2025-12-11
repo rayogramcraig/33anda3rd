@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>33⅓ & ⅓ – Label Capture</title>
+  <title>33⅓ & ⅓ – Label Capture (Photo)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * { box-sizing: border-box; }
@@ -17,46 +17,33 @@
     h2 { font-size: 1.1rem; margin: 1rem 0 0.4rem; }
     p { margin: 0.25rem 0 0.5rem; }
 
-    .camera-wrapper {
-      position: relative;
-      width: 100%;
-      max-width: 480px;
-      margin: 0 auto;
-      background: #000;
-      border-radius: 12px;
-      overflow: hidden;
-    }
-    video {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-    #overlay {
-      position: absolute;
-      border-radius: 50%;
-      border: 2px dashed rgba(255,255,255,0.9);
-      pointer-events: none;
-    }
-    .controls {
+    .uploader {
+      margin: 0.75rem 0 0.5rem;
       display: flex;
-      justify-content: center;
-      margin: 0.75rem 0 0;
+      gap: 0.5rem;
+      align-items: center;
     }
-    button {
+    input[type="file"] {
+      display: none;
+    }
+    .btn {
       border-radius: 999px;
       border: none;
-      padding: 0.5rem 1.1rem;
+      padding: 0.6rem 1.2rem;
       font-size: 0.95rem;
       font-weight: 500;
       cursor: pointer;
       background: #111;
       color: #fff;
       box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      text-align: center;
+      display: inline-block;
     }
-    button:active {
+    .btn:active {
       transform: translateY(1px);
       box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
+
     canvas {
       width: 100%;
       max-width: 480px;
@@ -64,6 +51,7 @@
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.15);
       background: #000;
+      margin: 0.25rem 0;
     }
     pre {
       white-space: pre-wrap;
@@ -89,137 +77,132 @@
   </style>
 </head>
 <body>
-  <h1>33⅓ & ⅓ – Label Capture</h1>
-  <p>Aim the label so it fills the circle as much as possible, then tap <strong>Capture Label</strong>.</p>
+  <h1>33⅓ & ⅓ – Label Capture (Photo)</h1>
+  <p>
+    Take a photo of the record label so it fills most of the frame, then let the app
+    crop and read it. This uses a still photo (like Spineless) instead of live video.
+  </p>
 
-  <div class="camera-wrapper">
-    <video id="video" autoplay playsinline></video>
-    <div id="overlay"></div>
+  <div class="uploader">
+    <label for="photoInput" class="btn">Take / Choose Photo</label>
+    <input id="photoInput" type="file" accept="image/*" capture="environment" />
+    <span id="fileName" style="font-size:0.8rem;color:#555;"></span>
   </div>
 
-  <div class="controls">
-    <button id="captureBtn">Capture Label</button>
-  </div>
-
-  <h2>Captured Frame (what OCR sees)</h2>
+  <h2>Cropped Label (what OCR sees)</h2>
   <canvas id="canvas"></canvas>
 
   <h2>OCR Result</h2>
-  <div class="status" id="statusText">Waiting for capture…</div>
+  <div class="status" id="statusText">Waiting for a photo…</div>
   <pre id="ocrText"></pre>
   <p id="discogsLink"></p>
 
+  <!-- Hidden full-image canvas (no styling needed) -->
+  <canvas id="fullCanvas" style="display:none;"></canvas>
+
   <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script>
-    const video = document.getElementById("video");
+    const photoInput = document.getElementById("photoInput");
+    const fileName = document.getElementById("fileName");
     const canvas = document.getElementById("canvas");
-    const captureBtn = document.getElementById("captureBtn");
+    const fullCanvas = document.getElementById("fullCanvas");
+    const statusText = document.getElementById("statusText");
     const ocrText = document.getElementById("ocrText");
     const discogsLink = document.getElementById("discogsLink");
-    const statusText = document.getElementById("statusText");
-    const overlay = document.getElementById("overlay");
 
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
-          audio: false
-        });
-        video.srcObject = stream;
-      } catch (err) {
-        console.error("Camera error:", err);
-        statusText.textContent = "Camera error – allow camera access.";
-      }
+    photoInput.addEventListener("change", handlePhoto);
+
+    function handlePhoto(evt) {
+      const file = evt.target.files && evt.target.files[0];
+      if (!file) return;
+
+      fileName.textContent = file.name || "New photo";
+      statusText.textContent = "Loading image…";
+      ocrText.textContent = "";
+      discogsLink.textContent = "";
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => processImage(img);
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
     }
 
-    video.addEventListener("loadedmetadata", () => {
-      positionOverlay();
-      window.addEventListener("resize", positionOverlay);
-    });
+    function processImage(img) {
+      // Draw image into fullCanvas, scaled down if huge
+      const maxDim = 1600;
+      let w = img.width;
+      let h = img.height;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
 
-    function positionOverlay() {
-      const rect = video.getBoundingClientRect();
-      const size = Math.min(rect.width, rect.height) * 0.9; // super tight
-      overlay.style.width = size + "px";
-      overlay.style.height = size + "px";
-      overlay.style.left = rect.left + (rect.width - size) / 2 + "px";
-      overlay.style.top = rect.top + (rect.height - size) / 2 + "px";
-    }
+      fullCanvas.width = w;
+      fullCanvas.height = h;
+      const fctx = fullCanvas.getContext("2d");
+      fctx.drawImage(img, 0, 0, w, h);
 
-    captureBtn.addEventListener("click", async () => {
-      if (!video.videoWidth) return;
+      // Crop big center square where the label should be
+      const labelSize = Math.round(Math.min(w, h) * 0.9); // big square
+      const cx = Math.round((w - labelSize) / 2);
+      const cy = Math.round((h - labelSize) / 2);
 
-      statusText.textContent = "Capturing frame…";
-
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-
-      // Draw full frame to temp canvas
-      const fullCtx = document.createElement("canvas").getContext("2d");
-      fullCtx.canvas.width = vw;
-      fullCtx.canvas.height = vh;
-      fullCtx.drawImage(video, 0, 0, vw, vh);
-
-      // Crop center square (label region)
-      const labelSize = Math.min(vw, vh) * 0.9;
-      const cx = (vw - labelSize) / 2;
-      const cy = (vh - labelSize) / 2;
-
-      const TARGET = 1024; // larger working size for Tesseract
+      const TARGET = 1024;
       const labelCanvas = document.createElement("canvas");
       labelCanvas.width = TARGET;
       labelCanvas.height = TARGET;
       const lctx = labelCanvas.getContext("2d");
 
       lctx.drawImage(
-        fullCtx.canvas,
+        fullCanvas,
         cx, cy, labelSize, labelSize,
         0, 0, TARGET, TARGET
       );
 
-      // Grayscale + global threshold
+      // Grayscale + contrast stretch (min/max)
       const imgData = lctx.getImageData(0, 0, TARGET, TARGET);
       const pixels = imgData.data;
 
-      // compute average luminance
-      let sum = 0;
+      let min = 255, max = 0;
       for (let i = 0; i < pixels.length; i += 4) {
         const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
         const gray = 0.3*r + 0.59*g + 0.11*b;
-        sum += gray;
+        if (gray < min) min = gray;
+        if (gray > max) max = gray;
       }
-      const avg = sum / (pixels.length / 4);
-      const threshold = avg * 0.9; // slightly favor lighter text
+      const range = Math.max(1, max - min);
 
       for (let i = 0; i < pixels.length; i += 4) {
         const r = pixels[i], g = pixels[i+1], b = pixels[i+2];
         const gray = 0.3*r + 0.59*g + 0.11*b;
-        const v = gray > threshold ? 255 : 0;
+        const norm = (gray - min) / range;
+        const v = Math.max(0, Math.min(255, norm * 255));
         pixels[i] = pixels[i+1] = pixels[i+2] = v;
       }
       lctx.putImageData(imgData, 0, 0);
 
-      // show what OCR sees
+      // Show the preprocessed label to you
       canvas.width = TARGET;
       canvas.height = TARGET;
       const showCtx = canvas.getContext("2d");
       showCtx.drawImage(labelCanvas, 0, 0, TARGET, TARGET);
 
+      // Kick off OCR
       const dataUrl = labelCanvas.toDataURL("image/png");
+      runOCR(dataUrl);
+    }
 
+    async function runOCR(dataUrl) {
       statusText.textContent = "Running OCR…";
       ocrText.textContent = "";
       discogsLink.textContent = "";
 
       try {
         const { data } = await Tesseract.recognize(dataUrl, "eng", {
-          tessedit_pageseg_mode: 6 // assume a block of text
+          tessedit_pageseg_mode: 6 // single block of text
         });
-
         const text = (data.text || "").trim();
         ocrText.textContent = text || "[no text detected]";
 
@@ -229,15 +212,13 @@
           discogsLink.innerHTML = `Discogs search: <a href="${url}" target="_blank">${url}</a>`;
           statusText.textContent = "OCR complete. Tap the link to search Discogs.";
         } else {
-          statusText.textContent = "No readable text found. Move closer & reduce glare, then try again.";
+          statusText.textContent = "No readable text found. Try another photo with the label closer and less glare.";
         }
       } catch (err) {
         console.error(err);
-        statusText.textContent = "OCR error. Try capturing again.";
+        statusText.textContent = "OCR error. Try another photo.";
       }
-    });
-
-    startCamera();
+    }
   </script>
 </body>
 </html>
