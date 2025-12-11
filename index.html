@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>33⅓ & ⅓ – Label Capture (Photo)</title>
+  <title>33⅓</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     * { box-sizing: border-box; }
@@ -23,9 +23,7 @@
       gap: 0.5rem;
       align-items: center;
     }
-    input[type="file"] {
-      display: none;
-    }
+    input[type="file"] { display: none; }
     .btn {
       border-radius: 999px;
       border: none;
@@ -74,13 +72,19 @@
       color: #555;
       margin-top: 0.25rem;
     }
+    .query-preview {
+      font-size: 0.8rem;
+      color: #333;
+      margin-top: 0.25rem;
+      font-family: Menlo, Monaco, Consolas, "SF Mono", monospace;
+    }
   </style>
 </head>
 <body>
-  <h1>33⅓ & ⅓ – Label Capture (Photo)</h1>
+  <h1>33⅓</h1>
   <p>
     Take a photo of the record label so it fills most of the frame, then let the app
-    crop and read it. This uses a still photo (like Spineless) instead of live video.
+    crop and read it.
   </p>
 
   <div class="uploader">
@@ -95,20 +99,22 @@
   <h2>OCR Result</h2>
   <div class="status" id="statusText">Waiting for a photo…</div>
   <pre id="ocrText"></pre>
+  <div id="queryPreview" class="query-preview"></div>
   <p id="discogsLink"></p>
 
-  <!-- Hidden full-image canvas (no styling needed) -->
+  <!-- Hidden full-image canvas -->
   <canvas id="fullCanvas" style="display:none;"></canvas>
 
   <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
   <script>
-    const photoInput = document.getElementById("photoInput");
-    const fileName = document.getElementById("fileName");
-    const canvas = document.getElementById("canvas");
-    const fullCanvas = document.getElementById("fullCanvas");
-    const statusText = document.getElementById("statusText");
-    const ocrText = document.getElementById("ocrText");
-    const discogsLink = document.getElementById("discogsLink");
+    const photoInput   = document.getElementById("photoInput");
+    const fileName     = document.getElementById("fileName");
+    const canvas       = document.getElementById("canvas");
+    const fullCanvas   = document.getElementById("fullCanvas");
+    const statusText   = document.getElementById("statusText");
+    const ocrText      = document.getElementById("ocrText");
+    const discogsLink  = document.getElementById("discogsLink");
+    const queryPreview = document.getElementById("queryPreview");
 
     photoInput.addEventListener("change", handlePhoto);
 
@@ -120,6 +126,7 @@
       statusText.textContent = "Loading image…";
       ocrText.textContent = "";
       discogsLink.textContent = "";
+      queryPreview.textContent = "";
 
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -145,7 +152,7 @@
       fctx.drawImage(img, 0, 0, w, h);
 
       // Crop big center square where the label should be
-      const labelSize = Math.round(Math.min(w, h) * 0.9); // big square
+      const labelSize = Math.round(Math.min(w, h) * 0.9);
       const cx = Math.round((w - labelSize) / 2);
       const cy = Math.round((h - labelSize) / 2);
 
@@ -161,7 +168,7 @@
         0, 0, TARGET, TARGET
       );
 
-      // Grayscale + contrast stretch (min/max)
+      // Grayscale + contrast stretch
       const imgData = lctx.getImageData(0, 0, TARGET, TARGET);
       const pixels = imgData.data;
 
@@ -183,36 +190,89 @@
       }
       lctx.putImageData(imgData, 0, 0);
 
-      // Show the preprocessed label to you
+      // Show the preprocessed label
       canvas.width = TARGET;
       canvas.height = TARGET;
       const showCtx = canvas.getContext("2d");
       showCtx.drawImage(labelCanvas, 0, 0, TARGET, TARGET);
 
-      // Kick off OCR
       const dataUrl = labelCanvas.toDataURL("image/png");
       runOCR(dataUrl);
+    }
+
+    // Build a cleaner Discogs search query from noisy OCR text
+    function buildSearchQuery(rawText) {
+      if (!rawText) return "";
+
+      // 1. Flatten whitespace
+      let text = rawText.replace(/\s+/g, " ");
+
+      // 2. Split into tokens and strip punctuation around them
+      let rawTokens = text.split(" ").map(t =>
+        t.replace(/[^A-Za-z0-9]/g, "")
+      );
+
+      // 3. Filter out junky tokens
+      const stopwords = new Set([
+        "WITH","AND","THE","OF","INC","LTD","SIDE","HIGH","FIDELITY",
+        "STEREO","MONO","RECORDS","RECORD","COMPANY","LIMITED",
+        "STEREOPHONIC","LONG","PLAY","MICROGROOVE","MADE","IN",
+        "NEW","YORK","N","J","USA"
+      ]);
+
+      const cleanTokens = [];
+      const seen = new Set();
+
+      for (let tok of rawTokens) {
+        if (!tok) continue;
+        const upper = tok.toUpperCase();
+
+        // too short?
+        if (upper.length < 3) continue;
+
+        // all digits and short? probably junk track number
+        if (/^\d+$/.test(upper) && upper.length < 4) continue;
+
+        // de-dupe
+        if (seen.has(upper)) continue;
+
+        // skip stop words
+        if (stopwords.has(upper)) continue;
+
+        seen.add(upper);
+        cleanTokens.push(tok);
+
+        if (cleanTokens.length >= 12) break; // keep query tight
+      }
+
+      return cleanTokens.join(" ");
     }
 
     async function runOCR(dataUrl) {
       statusText.textContent = "Running OCR…";
       ocrText.textContent = "";
       discogsLink.textContent = "";
+      queryPreview.textContent = "";
 
       try {
         const { data } = await Tesseract.recognize(dataUrl, "eng", {
-          tessedit_pageseg_mode: 6 // single block of text
+          tessedit_pageseg_mode: 6
         });
-        const text = (data.text || "").trim();
-        ocrText.textContent = text || "[no text detected]";
+        const raw = (data.text || "").trim();
+        ocrText.textContent = raw || "[no text detected]";
 
-        if (text) {
-          const query = encodeURIComponent(text.replace(/\s+/g, " "));
-          const url = `https://www.discogs.com/search/?q=${query}&type=all`;
-          discogsLink.innerHTML = `Discogs search: <a href="${url}" target="_blank">${url}</a>`;
+        const query = buildSearchQuery(raw);
+        if (query) {
+          queryPreview.textContent = "Search query: " + query;
+          const url = "https://www.discogs.com/search/?q=" +
+                      encodeURIComponent(query) +
+                      "&type=all";
+          discogsLink.innerHTML =
+            'Discogs search: <a href="' + url + '" target="_blank">' + url + "</a>";
           statusText.textContent = "OCR complete. Tap the link to search Discogs.";
         } else {
-          statusText.textContent = "No readable text found. Try another photo with the label closer and less glare.";
+          statusText.textContent =
+            "OCR ran, but no good words were found. Try another photo with the label closer and less glare.";
         }
       } catch (err) {
         console.error(err);
