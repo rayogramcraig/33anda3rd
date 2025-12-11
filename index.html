@@ -18,25 +18,21 @@
     }
     *, *::before, *::after { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; height: 100%; }
+
     body {
       font-family: var(--font-main);
-      background: #d9c4a8 url("maple.png") center/cover no-repeat fixed;
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
+      background: #d9c4a8;
       color: #000;
     }
 
     .app {
       position: relative;
-      width: 100%;
-      max-width: 430px;
+      width: 100vw;
       height: 100vh;
-      max-height: 920px;
       overflow: hidden;
-      border-radius: 32px;
-      box-shadow: 0 22px 40px rgba(0,0,0,0.6);
-      background: url("maple.png") center/cover no-repeat;
+      border-radius: 0;
+      box-shadow: none;
+      background: url("maple.png") center/cover no-repeat fixed;
     }
 
     .screen {
@@ -176,10 +172,27 @@
       max-width: 320px;
       margin-top: 10px;
     }
+
+    /* Flattened, circular record on processing screen */
+    .processing-record-wrapper .record {
+      padding-bottom: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #777 0%, #222 55%, #020202 100%);
+      transform: none;
+    }
+
     .record.spinning {
       transform: none;
       animation: spin 1.4s linear infinite;
     }
+
+    /* make sure the label texture fills the circle on processing screen */
+    .screen-processing .record-label {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
     .processing-label-text {
       margin-top: 32px;
       font-size: 14px;
@@ -596,6 +609,11 @@
     const overlay = document.getElementById("resultsOverlay");
     const overlayClose = document.getElementById("overlayClose");
 
+    // processing-screen label element (for the photographed label texture)
+    const processingRecordLabel = document.querySelector(
+      ".screen-processing .record-label"
+    );
+
     let currentDiscogsUrl = "";
     let currentGoogleQuery = "";
 
@@ -605,6 +623,14 @@
       overlay.setAttribute("aria-hidden", "true");
       app.classList.remove("show-results");
       app.classList.remove("show-processing");
+
+      // reset processing label texture
+      if (processingRecordLabel) {
+        processingRecordLabel.style.backgroundImage = "";
+        processingRecordLabel.style.backgroundColor = "#fff";
+      }
+
+      fileInput.value = "";
       fileInput.click();
     });
 
@@ -625,6 +651,12 @@
       currentGoogleQuery = "";
       discogsCover.src = "";
 
+      // reset processing label texture
+      if (processingRecordLabel) {
+        processingRecordLabel.style.backgroundImage = "";
+        processingRecordLabel.style.backgroundColor = "#fff";
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
         const img = new Image();
@@ -641,8 +673,22 @@
 
       canvas.width = size;
       canvas.height = size;
+
+      // Draw the cropped, COLOR square first
       ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
 
+      // Use that crop as the label texture on the processing record
+      try {
+        const labelDataUrl = canvas.toDataURL("image/png");
+        if (processingRecordLabel) {
+          processingRecordLabel.style.backgroundImage = `url(${labelDataUrl})`;
+          processingRecordLabel.style.backgroundColor = "transparent";
+        }
+      } catch (e) {
+        console.error("Error creating label data URL", e);
+      }
+
+      // Now convert the same crop to grayscale for OCR
       const imageData = ctx.getImageData(0, 0, size, size);
       const data = imageData.data;
       for (let i = 0; i < data.length; i += 4) {
@@ -713,7 +759,7 @@
           ? "Cleaned query: " + cleanQuery
           : "Cleaned query: (nothing usable found)";
 
-        // NEW: show the exact Google query we feed to SerpAPI
+        // Show the exact Google query we feed to SerpAPI
         if (cleanQuery) {
           const gq = `site:discogs.com ${cleanQuery}`;
           currentGoogleQuery = gq;
