@@ -883,10 +883,17 @@
         cleanQueryLine.textContent = cleanQuery
           ? "Cleaned query: " + cleanQuery
           : "Cleaned query: (nothing usable found)";
+
+        // --- CHANGED: always go to results, even if there's no usable text ---
         if (!cleanQuery) {
-          matchStatus.textContent =
-            "Not enough text to search. Try a clearer photo.";
+          const msg =
+            "Not enough text to search. Try a clearer photo of the label.";
+          matchStatus.textContent = msg;
+          processingStatus.textContent = msg;
+          statusText.textContent = msg;
+
           app.classList.remove("show-processing");
+          app.classList.add("show-results");
           return;
         }
 
@@ -895,11 +902,18 @@
             encodeURIComponent(cleanQuery)
         );
 
+        // --- CHANGED: show results screen even if lookup fails ---
         if (!res.ok) {
           const errText = await res.text();
-          matchStatus.textContent = "Lookup error: " + res.status;
           console.error("discogsSearch error:", errText);
+
+          const msg = "Lookup error: " + res.status;
+          matchStatus.textContent = msg;
+          processingStatus.textContent = msg;
+          statusText.textContent = msg;
+
           app.classList.remove("show-processing");
+          app.classList.add("show-results");
           return;
         }
 
@@ -938,10 +952,14 @@
         app.classList.add("show-results");
       } catch (err) {
         console.error(err);
-        processingStatus.textContent = "Error during OCR or lookup.";
-        statusText.textContent = "Error during OCR or lookup.";
-        matchStatus.textContent = "";
+        const msg = "Error during OCR or lookup.";
+        processingStatus.textContent = msg;
+        statusText.textContent = msg;
+        matchStatus.textContent = msg;
+
+        // --- CHANGED: still transition to results so user sees the error/ocr ---
         app.classList.remove("show-processing");
+        app.classList.add("show-results");
       }
     }
 
