@@ -17,23 +17,31 @@ async function googleSearch(query, apiKey) {
   return res.json();
 }
 
-// Normal: look in organic_results for a Discogs hit
-function pickDiscogsOrganic(organic) {
-  if (!organic || !Array.isArray(organic)) return null;
-  return organic.find((r) => {
-    const link = r.link || "";
-    const displayed = r.displayed_link || "";
-    const source = r.source || "";
-    return (
-      /discogs\.com/i.test(link) ||
-      /discogs\.com/i.test(displayed) ||
-      /discogs/i.test(source)
-    );
-  });
+// Is this a Discogs release/master URL with an ID we can hit via API?
+function isDiscogsReleaseOrMasterUrl(url) {
+  if (!url) return false;
+  return /discogs\.com\/(?:release|master)\/\d+/i.test(url);
 }
 
-// Fallback: if organic scan fails, scan the *entire* SERP JSON string
-// for the first discogs.com URL and wrap it in a result-like object.
+// Prefer Discogs "release" / "master" URLs from organic results
+function pickDiscogsOrganic(organic) {
+  if (!organic || !Array.isArray(organic)) return null;
+
+  const discogsResults = organic.filter((r) => {
+    const link = r.link || "";
+    return /discogs\.com/i.test(link);
+  });
+
+  if (!discogsResults.length) return null;
+
+  // First, try to find a /release/ or /master/ URL
+  const releaseLike = discogsResults.find((r) =>
+    isDiscogsReleaseOrMasterUrl(r.link)
+  );
+  return releaseLike || discogsResults[0];
+}
+
+// Fallback: scan the *entire* SERP JSON for a release/master URL
 function pickDiscogsFromAny(serp, debugInfo, prefix) {
   if (!serp) return null;
 
@@ -45,15 +53,20 @@ function pickDiscogsFromAny(serp, debugInfo, prefix) {
   }
 
   const text = JSON.stringify(serp);
-  const match = text.match(/https?:\/\/[^"\\]*discogs\.com[^"\\]*/i);
+
+  // Only accept proper /release/ or /master/ URLs
+  const match = text.match(
+    /https?:\/\/[^"\\]*discogs\.com\/(?:release|master)\/\d+[^"\\]*/i
+  );
+
   if (match) {
     const url = match[0];
-    debugInfo[`${prefix}DiscogsSource`] = "json_scan";
+    debugInfo[`${prefix}DiscogsSource`] = "json_scan_release_or_master";
     debugInfo[`${prefix}DiscogsUrlFromScan`] = url;
     return { link: url, title: null, thumbnail: null };
   }
 
-  return null;
+  return null; // don't fall back to random Discogs URLs without IDs
 }
 
 // First non-Discogs organic result – used as a "hint" (e.g., eBay)
@@ -70,7 +83,7 @@ function pickHintResult(organic) {
 function parseArtistAndTitleFromTitle(title) {
   if (!title) return null;
 
-  // Remove parenthetical clutter like (Blue Note Classic Vinyl Series), (Record, 2023), etc.
+  // Remove parenthetical clutter
   let base = title.replace(/\s*\([^)]*\)\s*/g, " ");
 
   // Remove common suffix noise words at the end
@@ -97,7 +110,6 @@ function parseArtistAndTitleFromTitle(title) {
     if (artist && album) return { artist, title: album };
   }
 
-  // No robust pattern hit
   return null;
 }
 
@@ -129,7 +141,7 @@ exports.handler = async (event, context) => {
     const debugInfo = {};
 
     // 1) First pass: restrict to Discogs
-    let serp = await googleSearch(primaryGoogleQuery, apiKey);
+    const serp = await googleSearch(primaryGoogleQuery, apiKey);
     debugInfo.primaryQuery = primaryGoogleQuery;
     debugInfo.primaryHasOrganic =
       !!serp.organic_results && serp.organic_results.length;
@@ -182,12 +194,13 @@ exports.handler = async (event, context) => {
       }
     }
 
-    if (!chosen || !chosen.link) {
-      // Still no Discogs link found at all
+    if (!chosen || !chosen.link || !isDiscogsReleaseOrMasterUrl(chosen.link)) {
+      // We never found a Discogs URL that points to a release/master with an ID
       return {
         statusCode: 404,
         body: JSON.stringify({
-          error: "No Discogs link found in Google results",
+          error:
+            "No Discogs release/master link found in Google results",
           query,
           searchSource,
           debug: debugInfo,
@@ -207,7 +220,7 @@ exports.handler = async (event, context) => {
     const userAgent =
       "33anda3rd/1.0 +https://33anda3rd.netlify.app/";
     const discogsHeaders = { "User-Agent": userAgent };
-    const discogsToken = process.env.DISCOGS_TOKEN; // optional
+    const discogsToken = process.env.DISCOGS_TOKEN; // optional but nice
 
     if (discogsToken) {
       discogsHeaders["Authorization"] = `Discogs token=${discogsToken}`;
@@ -230,7 +243,19 @@ exports.handler = async (event, context) => {
     }
 
     if (discogsJson) {
-      if (!title && discogsJson.title) title = discogsJson.title;
+      if (!title && discogsJson.title) {
+        // Discogs "title" is usually just the album name; we keep it
+        title = discogsJson.title;
+      }
+      if (discogsJson.artists && discogsJson.artists.length) {
+        const artistName = discogsJson.artists
+          .map((a) => a.name)
+          .join(", ");
+        // For the UI we like "Artist – Title"
+        if (artistName && discogsJson.title) {
+          title = `${artistName} – ${discogsJson.title}`;
+        }
+      }
       if (discogsJson.images && discogsJson.images.length > 0) {
         const img = discogsJson.images[0];
         coverImage = img.uri || img.uri150 || coverImage;
@@ -246,7 +271,7 @@ exports.handler = async (event, context) => {
         discogsUrl,
         title,
         coverImage,
-        debug: debugInfo, // keep for now; remove later if you want
+        debug: debugInfo, // keep for now while we're tuning
       }),
     };
   } catch (err) {
