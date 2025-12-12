@@ -34,12 +34,10 @@
       --text-main: #ffffff;
       --shadow-strong: 0 18px 30px rgba(0, 0, 0, 0.45);
       --shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.35);
+      --font-main: "coolvetica", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 
-      --font-main: "coolvetica", sans-serif;
-        "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-
-      /* NEW: dynamic results gradient base color (RGB components) */
-      --results-rgb: 180, 0, 0; /* default fallback */
+      /* NEW: dynamic results gradient color (RGB components) */
+      --results-rgb: 180, 0, 0;
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -206,8 +204,8 @@
     .tonearm {
       position: absolute;
       width: 52%;
-      right: -18%;   /* push further to the right */
-      top: 8%;       /* move up */
+      right: -18%;
+      top: 8%;
       transform: rotate(18deg);
       pointer-events: none;
       z-index: 10;
@@ -237,7 +235,7 @@
       margin-top: 32px;
       font-size: 14px;
       letter-spacing: 0.0em;
-      font-weight:400;
+      font-weight: 400;
       opacity: 0.8;
     }
     .processing-status { margin-top: 8px; font-size: 13px; }
@@ -277,7 +275,6 @@
       padding-bottom: 46%;
       transform: translate(-50%, -50%);
       border-radius: 50%;
-      /* label from photo will be dropped in here */
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -308,7 +305,7 @@
       flex: 1;
       width: 100%;
 
-      /* NEW: gradient now uses the dynamic --results-rgb */
+      /* NEW: gradient driven by --results-rgb */
       background:
         linear-gradient(
           to bottom,
@@ -374,7 +371,7 @@
     .mini-record {
       position: relative;
       width: 88px;
-      padding-bottom: 88px; /* perfect circle */
+      padding-bottom: 88px;
       border-radius: 50%;
       background: radial-gradient(circle at 30% 30%, #777 0%, #222 55%, #020202 100%);
       transform: none;
@@ -583,8 +580,8 @@
     <section class="screen screen-results" aria-label="Scan results">
       <div class="results-top">
         <div class="album-art">
-          <!-- NOTE: we try to enable CORS so we can sample the image if the server allows it -->
-          <img id="discogsCover" alt="Album cover" crossorigin="anonymous" />
+          <!-- IMPORTANT: no crossorigin here, so the cover always displays -->
+          <img id="discogsCover" alt="Album cover" />
         </div>
         <div class="album-label-circle"></div>
       </div>
@@ -672,18 +669,19 @@
     let currentDiscogsUrl = "";
     let currentGoogleQuery = "";
 
-    // NEW: keep the label crop as a data URL so we can color-sample it later
+    // NEW: keep the label crop data URL for color sampling
     let currentLabelDataUrl = "";
 
+    // NEW: a temporary cover sampler image (CORS-enabled attempt)
+    let coverSamplerImg = null;
+
     captureHitArea.addEventListener("click", () => fileInput.click());
+
     retakeButton.addEventListener("click", () => {
       overlay.classList.remove("open");
       overlay.setAttribute("aria-hidden", "true");
       app.classList.remove("show-results");
       app.classList.remove("show-processing");
-
-      currentLabelDataUrl = "";
-      setResultsAccentRgb([180, 0, 0]); // reset to default-ish
 
       // reset label textures
       if (processingRecordLabel) {
@@ -693,6 +691,10 @@
       if (albumLabelCircle) {
         albumLabelCircle.style.backgroundImage = "";
       }
+
+      currentLabelDataUrl = "";
+      coverSamplerImg = null;
+      setResultsAccentRgb([180, 0, 0]);
 
       fileInput.value = "";
       fileInput.click();
@@ -716,7 +718,8 @@
       discogsCover.removeAttribute("src");
 
       currentLabelDataUrl = "";
-      setResultsAccentRgb([180, 0, 0]); // reset before new sampling
+      coverSamplerImg = null;
+      setResultsAccentRgb([180, 0, 0]);
 
       // reset label textures
       if (processingRecordLabel) {
@@ -759,12 +762,12 @@
         if (albumLabelCircle) {
           albumLabelCircle.style.backgroundImage = `url(${labelDataUrl})`;
         }
+
+        // NEW: update gradient immediately based on the label
+        updateResultsGradient();
       } catch (e) {
         console.error("Error creating label data URL", e);
       }
-
-      // NEW: set results gradient based on the label crop immediately (fast + reliable)
-      updateResultsGradient();
 
       // Now convert the same crop to grayscale for OCR
       const imageData = ctx.getImageData(0, 0, size, size);
@@ -896,19 +899,18 @@
         currentDiscogsUrl = result.discogsUrl || "";
 
         if (result.coverImage) {
-          // ensure crossOrigin is set *before* setting src (helps if server sends CORS headers)
-          discogsCover.crossOrigin = "anonymous";
-          discogsCover.onload = () => {
-            // NEW: try to incorporate album art into the dominant color (if canvas isn't tainted)
-            updateResultsGradient();
-          };
-          discogsCover.onerror = () => {
-            // if it fails, we still have label-only
-            updateResultsGradient();
-          };
+          // IMPORTANT: cover always loads without CORS so it reliably displays
+          discogsCover.removeAttribute("crossorigin");
           discogsCover.src = result.coverImage;
+
+          // Optional: try to sample the cover color via a separate CORS image (won't affect display)
+          trySampleCoverColor(result.coverImage);
+
+          // Update gradient now (label-driven), and again if sampler succeeds
+          updateResultsGradient();
         } else {
           discogsCover.removeAttribute("src");
+          coverSamplerImg = null;
           updateResultsGradient();
         }
 
@@ -951,42 +953,55 @@
     overlayDiscogsButton.addEventListener("click", openDiscogs);
 
     /* =========================================================
-       NEW: Dominant-color sampling + readable darkening
+       Dynamic results gradient color (dominant color + readability)
        ========================================================= */
 
     function setResultsAccentRgb(rgb) {
-      // rgb is [r,g,b]
       document.documentElement.style.setProperty("--results-rgb", `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`);
     }
 
+    function trySampleCoverColor(url) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        coverSamplerImg = img;
+        updateResultsGradient();
+      };
+      img.onerror = () => {
+        // CORS failed or host blocked it — no problem; keep label-based color
+        coverSamplerImg = null;
+      };
+      img.src = url;
+    }
+
     function updateResultsGradient() {
-      // Use label + (if possible) album art. Label always exists as data URL.
       const sources = [];
-      if (currentLabelDataUrl) sources.push({ type: "dataUrl", value: currentLabelDataUrl, weight: 1.0 });
-      if (discogsCover && discogsCover.src) sources.push({ type: "imgEl", value: discogsCover, weight: 1.0 });
+
+      // Always prefer label (local data URL, never CORS-tainted)
+      if (currentLabelDataUrl) sources.push({ type: "dataUrl", value: currentLabelDataUrl, weight: 1.2 });
+
+      // If the cover sampler succeeded (with CORS), blend it in
+      if (coverSamplerImg) sources.push({ type: "imgEl", value: coverSamplerImg, weight: 1.0 });
 
       if (!sources.length) {
         setResultsAccentRgb([180, 0, 0]);
         return;
       }
 
-      // compute dominant across sources, ignore failures
       const rgb = dominantRgbFromSources(sources);
-      const safeRgb = ensureReadableOnWhite(rgb);
-      setResultsAccentRgb(safeRgb);
+      const safe = ensureReadableOnWhite(rgb);
+      setResultsAccentRgb(safe);
     }
 
     function dominantRgbFromSources(sources) {
-      // Combine histograms (quantized RGB) from each source
-      const buckets = new Map(); // key -> count
+      const buckets = new Map();
 
       for (const s of sources) {
         try {
-          const pixels = getPixelsFromSource(s);
-          if (!pixels) continue;
+          const imageData = getPixelsFromSource(s);
+          if (!imageData) continue;
 
-          const { data } = pixels;
-          // quantize to reduce noise
+          const data = imageData.data;
           for (let i = 0; i < data.length; i += 4) {
             const a = data[i + 3];
             if (a < 64) continue;
@@ -995,40 +1010,34 @@
             const g = data[i + 1];
             const b = data[i + 2];
 
-            // compute "is it basically white" & "is it basically black"
             const max = Math.max(r, g, b);
             const min = Math.min(r, g, b);
-            const sat = max - min;          // crude saturation
-            const bright = (r + g + b) / 3; // crude brightness
+            const sat = max - min;
+            const bright = (r + g + b) / 3;
 
-            // Skip near-black pixels (they dominate on covers) and skip near-white low-sat pixels (paper glare)
+            // Ignore near-black and glare whites
             if (bright < 18) continue;
             if (bright > 245 && sat < 10) continue;
 
-            // also skip low-saturation midtones a bit (keeps results from turning muddy gray)
+            // Ignore very low-sat bright pixels
             if (sat < 8 && bright > 180) continue;
 
-            // quantize (5 bits each -> 32 levels)
+            // Quantize (5 bits/channel)
             const rq = r >> 3;
             const gq = g >> 3;
             const bq = b >> 3;
             const key = (rq << 10) | (gq << 5) | bq;
 
-            const add = 1 * (s.weight || 1);
+            const add = (s.weight || 1);
             buckets.set(key, (buckets.get(key) || 0) + add);
           }
         } catch (e) {
-          // ignore per-source failures (e.g. CORS-tainted cover art)
-          console.warn("Color sampling skipped for one source:", e);
+          // ignore failures per-source
         }
       }
 
-      if (!buckets.size) {
-        // if everything got filtered out, just fall back to dark gray
-        return [20, 20, 20];
-      }
+      if (!buckets.size) return [18, 18, 18];
 
-      // pick max bucket
       let bestKey = null;
       let bestCount = -1;
       for (const [k, c] of buckets.entries()) {
@@ -1042,16 +1051,15 @@
       const gq = (bestKey >> 5) & 31;
       const bq = bestKey & 31;
 
-      // de-quantize back to 0-255 (center of bin)
-      const r = Math.min(255, (rq << 3) + 4);
-      const g = Math.min(255, (gq << 3) + 4);
-      const b = Math.min(255, (bq << 3) + 4);
-
-      return [r, g, b];
+      // De-quantize to center of bin
+      return [
+        Math.min(255, (rq << 3) + 4),
+        Math.min(255, (gq << 3) + 4),
+        Math.min(255, (bq << 3) + 4)
+      ];
     }
 
     function getPixelsFromSource(source) {
-      // returns ImageData from a downsampled draw
       const sampleSize = 72;
       const tmp = document.createElement("canvas");
       tmp.width = sampleSize;
@@ -1059,16 +1067,11 @@
       const tctx = tmp.getContext("2d", { willReadFrequently: true });
 
       if (source.type === "dataUrl") {
+        // data URLs are local; load quickly, but still async — so we do a small sync-ish shortcut:
+        // draw from an Image that we know is very likely cached; if not complete, skip this pass.
         const img = new Image();
         img.src = source.value;
-
-        // WARNING: synchronous pixel read requires the image already loaded.
-        // For data URLs created locally, this is effectively immediate,
-        // but we still guard by checking complete.
-        if (!img.complete) {
-          // best effort: skip this pass
-          return null;
-        }
+        if (!img.complete) return null;
         tctx.drawImage(img, 0, 0, sampleSize, sampleSize);
         return tctx.getImageData(0, 0, sampleSize, sampleSize);
       }
@@ -1076,8 +1079,6 @@
       if (source.type === "imgEl") {
         const imgEl = source.value;
         if (!imgEl.complete || !imgEl.naturalWidth) return null;
-
-        // drawing a cross-origin image without proper CORS will throw or taint
         tctx.drawImage(imgEl, 0, 0, sampleSize, sampleSize);
         return tctx.getImageData(0, 0, sampleSize, sampleSize);
       }
@@ -1086,40 +1087,33 @@
     }
 
     function ensureReadableOnWhite(rgb) {
-      // Requirement:
-      // - if dominant is "white-ish", use dark gray/black
-      // - otherwise, make sure the color is dark enough for white text
       const [r, g, b] = rgb;
 
-      const isWhiteish = (r > 235 && g > 235 && b > 235);
-      if (isWhiteish) return [18, 18, 18];
+      // If dominant is basically white, use dark gray
+      if (r > 235 && g > 235 && b > 235) return [18, 18, 18];
 
-      // Make sure contrast ratio with white is >= 4.5 (WCAG-ish for body text)
+      // Darken until contrast with white is decent
       let out = [r, g, b];
       let tries = 0;
-      while (contrastRatio(out, [255,255,255]) < 4.5 && tries < 12) {
-        out = darkenRgb(out, 0.08); // darken by 8% each step
+      while (contrastRatio(out, [255, 255, 255]) < 4.5 && tries < 12) {
+        out = darkenRgb(out, 0.08);
         tries++;
       }
 
-      // If still too bright for some weird reason, slam to near-black
-      if (contrastRatio(out, [255,255,255]) < 4.5) return [18,18,18];
-
+      if (contrastRatio(out, [255, 255, 255]) < 4.5) return [18, 18, 18];
       return out;
     }
 
     function darkenRgb(rgb, amount) {
-      // amount 0..1
-      const [r,g,b] = rgb;
+      const [r, g, b] = rgb;
       return [
         Math.max(0, Math.round(r * (1 - amount))),
         Math.max(0, Math.round(g * (1 - amount))),
-        Math.max(0, Math.round(b * (1 - amount))),
+        Math.max(0, Math.round(b * (1 - amount)))
       ];
     }
 
     function contrastRatio(rgb1, rgb2) {
-      // WCAG contrast ratio: (L1+0.05)/(L2+0.05)
       const L1 = relLuminance(rgb1);
       const L2 = relLuminance(rgb2);
       const lighter = Math.max(L1, L2);
@@ -1128,12 +1122,11 @@
     }
 
     function relLuminance(rgb) {
-      // sRGB to linear
-      const [r,g,b] = rgb.map(v => v / 255);
-      const R = (r <= 0.03928) ? r/12.92 : Math.pow((r+0.055)/1.055, 2.4);
-      const G = (g <= 0.03928) ? g/12.92 : Math.pow((g+0.055)/1.055, 2.4);
-      const B = (b <= 0.03928) ? b/12.92 : Math.pow((b+0.055)/1.055, 2.4);
-      return 0.2126*R + 0.7152*G + 0.0722*B;
+      const [r, g, b] = rgb.map(v => v / 255);
+      const R = (r <= 0.03928) ? (r / 12.92) : Math.pow((r + 0.055) / 1.055, 2.4);
+      const G = (g <= 0.03928) ? (g / 12.92) : Math.pow((g + 0.055) / 1.055, 2.4);
+      const B = (b <= 0.03928) ? (b / 12.92) : Math.pow((b + 0.055) / 1.055, 2.4);
+      return 0.2126 * R + 0.7152 * G + 0.0722 * B;
     }
   </script>
 </body>
