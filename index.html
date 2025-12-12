@@ -4,8 +4,31 @@
   <meta charset="UTF-8" />
   <title>33⅓ – Label Scanner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<!-- iOS: run as a standalone "web app" when added to Home Screen -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="33anda3rd" />
+
+<!-- Nice-to-have: theme colors (Android + some browsers) -->
+<meta name="theme-color" content="#b40000" />
+
+<!-- Favicons -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="favicon-32x32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="favicon-16x16.png" sizes="16x16">
+
+<!-- iOS Home Screen icon (important: iOS prefers this over manifest icons) -->
+<link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180" />
+
+<!-- PWA manifest (helps Android + iOS 16.4+; still keep apple-touch-icon) -->
+<link rel="manifest" href="manifest.webmanifest" />
+
+
+
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <link rel="stylesheet" href="https://use.typekit.net/zxp4dru.css">
+
 
   <style>
     :root {
@@ -167,8 +190,7 @@
     .screen-processing h1 {
       margin: 0 0 32px;
       font-size: 24px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      letter-spacing: 0.0em;
       text-align: center;
     }
     .processing-record-wrapper {
@@ -213,8 +235,8 @@
     .processing-label-text {
       margin-top: 32px;
       font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.0em;
+      font-weight:400;
       opacity: 0.8;
     }
     .processing-status { margin-top: 8px; font-size: 13px; }
@@ -540,7 +562,7 @@
 
     <!-- PROCESSING -->
     <section class="screen screen-processing" aria-label="Processing label">
-      <h1>finding your record</h1>
+      <h1>Finding your record</h1>
       <div class="processing-record-wrapper">
         <div class="record spinning">
           <div class="record-label"></div>
