@@ -1052,8 +1052,10 @@
     function saveCatalog() {
       try {
         localStorage.setItem(LS_KEY, JSON.stringify(catalog));
+        return true;
       } catch (e) {
         console.warn("Could not save catalog", e);
+        return false;
       }
     }
     function loadSortKey() {
@@ -1109,6 +1111,7 @@
 
     openCatalogBtn.addEventListener("click", () => {
       catalog = loadCatalog();
+      sortKey = loadSortKey();
       showCatalog();
     });
 
@@ -1212,7 +1215,7 @@
         if (albumLabelCircle) albumLabelCircle.style.backgroundImage = `url(${labelDataUrl})`;
 
         // Create smaller JPEG thumb for catalog export (lower-res)
-        currentLabelThumbDataUrl = makeLabelThumbDataUrl(labelDataUrl);
+        currentLabelThumbDataUrl = makeLabelThumbDataUrl();
 
         updateResultsGradient();
       } catch (e) {
@@ -1236,29 +1239,26 @@
       runOCR();
     }
 
-    function makeLabelThumbDataUrl(srcDataUrl) {
-      // Downscale to ~320px square and compress (JPEG) for export/import catalog JSON
-      const THUMB = 320;
-      const img = new Image();
-      img.src = srcDataUrl;
-      // Note: srcDataUrl is already in-memory; most browsers will sync-complete quickly
+    function makeLabelThumbDataUrl() {
+      // Downscale the *already-cropped* label canvas to a small JPEG for storage/export.
+      // This avoids async image decode and keeps localStorage size reasonable.
+      const THUMB = 200; // px
       thumbCanvas.width = THUMB;
       thumbCanvas.height = THUMB;
 
       try {
-        // If complete, draw immediately; otherwise a best-effort fallback
-        if (img.complete) {
-          tctx.clearRect(0, 0, THUMB, THUMB);
-          tctx.drawImage(img, 0, 0, THUMB, THUMB);
-          return thumbCanvas.toDataURL("image/jpeg", 0.72);
-        }
-      } catch (e) {}
-
-      // Fallback: return original (still works; just larger)
-      return srcDataUrl;
+        tctx.clearRect(0, 0, THUMB, THUMB);
+        tctx.imageSmoothingEnabled = true;
+        tctx.imageSmoothingQuality = "high";
+        // `canvas` is the cropped square label
+        tctx.drawImage(canvas, 0, 0, THUMB, THUMB);
+        return thumbCanvas.toDataURL("image/jpeg", 0.62);
+      } catch (e) {
+        // Fallback: store the PNG (larger) if needed
+        return currentLabelDataUrl || "";
+      }
     }
-
-    // -----------------------------
+// -----------------------------
     // OCR + lookup (unchanged logic, with save-star refresh)
     // -----------------------------
     function buildCleanQuery(rawText) {
@@ -1445,13 +1445,26 @@
       const idx = catalog.findIndex(x => stableIdForRecord(x) === id);
 
       if (idx >= 0) {
-        catalog.splice(idx, 1);
-        saveCatalog();
+        const removed = catalog.splice(idx, 1)[0];
+        const ok = saveCatalog();
+        if (!ok) {
+          // revert
+          catalog.splice(idx, 0, removed);
+          toastMsg("Couldn’t remove (storage blocked)");
+          return;
+        }
         setStarVisual(saveStarBtn, false);
         toastMsg("Removed from catalog");
       } else {
         catalog.unshift(rec);
-        saveCatalog();
+        const ok = saveCatalog();
+        if (!ok) {
+          // revert
+          catalog.shift();
+          setStarVisual(saveStarBtn, false);
+          toastMsg("Couldn’t save (storage full/blocked)");
+          return;
+        }
         setStarVisual(saveStarBtn, true);
         toastMsg("Saved to catalog");
       }
