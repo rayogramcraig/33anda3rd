@@ -392,6 +392,61 @@
       font-weight: 800;
     }
 
+    .catalog-button {
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: #ffffff;
+      box-shadow: var(--shadow-soft);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .catalog-icon {
+      width: 18px;
+      height: 14px;
+      position: relative;
+    }
+    .catalog-icon::before,
+    .catalog-icon::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--accent-red);
+      opacity: 0.95;
+    }
+    .catalog-icon::before { top: 0; }
+    .catalog-icon::after { bottom: 0; }
+    .catalog-icon span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 3px;
+      border-radius: 999px;
+      background: var(--accent-red);
+      opacity: 0.95;
+    }
+
+    /* Make Discogs pill a touch smaller on the results footer row to fit the extra icon */
+    .results-bottom-row .discogs-button {
+      padding: 12px 18px 12px 16px;
+      font-size: 18px;
+      gap: 9px;
+    }
+    .results-bottom-row .discogs-button .play-icon {
+      border-top-width: 7px;
+      border-bottom-width: 7px;
+      border-left-width: 11px;
+    }
+
     .retake-button { border: none; padding: 0; background: transparent; cursor: pointer; flex: 0 0 auto; }
 
     .mini-record {
@@ -822,6 +877,10 @@
 
           <button class="info-button" type="button" id="infoButton" aria-label="Show technical results">i</button>
 
+          <button class="catalog-button" type="button" id="catalogButton" aria-label="Open my catalog">
+            <span class="catalog-icon" aria-hidden="true"><span></span></span>
+          </button>
+
           <button class="discogs-button" type="button" id="discogsButton" aria-label="Open release on Discogs">
             <span class="play-icon" aria-hidden="true"></span>
             <span>Discogs</span>
@@ -962,6 +1021,9 @@
     const albumTitle = document.getElementById("albumTitle");
     const discogsButton = document.getElementById("discogsButton");
     const overlayDiscogsButton = document.getElementById("overlayDiscogsButton");
+
+    // Results footer catalog button
+    const catalogButton = document.getElementById("catalogButton");
 
     const infoButton = document.getElementById("infoButton");
     const overlay = document.getElementById("resultsOverlay");
@@ -1110,6 +1172,20 @@
     captureHitArea.addEventListener("click", () => fileInput.click());
 
     openCatalogBtn.addEventListener("click", () => {
+      catalog = loadCatalog();
+      sortKey = loadSortKey();
+      showCatalog();
+    });
+
+    if (catalogButton) {
+      catalogButton.addEventListener("click", () => {
+        catalog = loadCatalog();
+        sortKey = loadSortKey();
+        showCatalog();
+      });
+    }
+
+    catalogButton.addEventListener("click", () => {
       catalog = loadCatalog();
       sortKey = loadSortKey();
       showCatalog();
