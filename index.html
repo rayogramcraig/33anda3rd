@@ -36,7 +36,7 @@
       --shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.35);
       --font-main: "coolvetica", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
 
-      /* NEW: dynamic results gradient color (RGB components) */
+      /* dynamic results gradient color (RGB components) */
       --results-rgb: 180, 0, 0;
     }
 
@@ -60,7 +60,7 @@
       overflow: hidden;
       border-radius: 0;
       box-shadow: none;
-      background: transparent; /* let the wood show through */
+      background: transparent;
     }
 
     .screen {
@@ -200,18 +200,16 @@
       margin-top: 10px;
     }
 
-    /* Tonearm overlay on scanning record – tuned to sit beside the record */
     .tonearm {
       position: absolute;
       width: 52%;
-      right: -18%;
-      top: 8%;
+      right: -21%;
+      top: 3%;
       transform: rotate(18deg);
       pointer-events: none;
       z-index: 10;
     }
 
-    /* Flattened, circular record on processing screen */
     .processing-record-wrapper .record {
       padding-bottom: 100%;
       border-radius: 50%;
@@ -224,7 +222,6 @@
       animation: spin 1.4s linear infinite;
     }
 
-    /* label texture on processing record */
     .screen-processing .record-label {
       background-size: cover;
       background-position: center;
@@ -285,7 +282,7 @@
       position: absolute;
       inset: 10%;
       border-radius: 50%;
-      border: 3px solid rgba(255,220,150,0.8);
+      border: 1px solid rgba(255,220,150,0.2);
     }
     .album-label-circle::after {
       content: "";
@@ -304,8 +301,6 @@
       position: relative;
       flex: 1;
       width: 100%;
-
-      /* NEW: gradient driven by --results-rgb */
       background:
         linear-gradient(
           to bottom,
@@ -321,15 +316,26 @@
     }
 
     .album-meta { padding-right: 32%; }
+
+    /* UPDATED TYPOGRAPHY (artist smaller, title larger + lighter) */
     .album-meta h2,
     .album-meta h3 {
       margin: 0;
-      font-weight: 700;
-	  font-size:1.5rem;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.02em;
     }
-    .album-meta h2 { font-size: 24px; line-height: 1.1; margin-bottom: 10px; }
-    .album-meta h3 { font-size: 24px; line-height: 1.1; }
+    .album-meta h2 {
+      font-size: 20px;
+      line-height: 1.1;
+      margin-bottom: 14px;
+      font-weight: 600;
+      opacity: 0.98;
+    }
+    .album-meta h3 {
+      font-size: 56px;
+      line-height: 0.98;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
 
     /* Bottom row: evenly spaced controls */
     .results-bottom-row {
@@ -343,7 +349,6 @@
       gap: 18px;
     }
 
-    /* Info button in the row */
     .info-button {
       flex: 0 0 auto;
       width: 60px;
@@ -368,7 +373,6 @@
       flex: 0 0 auto;
     }
 
-    /* New flat mini-record used on results screen */
     .mini-record {
       position: relative;
       width: 88px;
@@ -433,8 +437,6 @@
       border-bottom: 8px solid transparent;
       border-left: 12px solid var(--accent-red);
     }
-
-    /* OVERLAY */
 
     .results-overlay {
       position: absolute;
@@ -525,17 +527,15 @@
       border-left: 9px solid #fff;
     }
 
-    .meta-line {
-      font-size: 12px;
-      color: #555;
-    }
+    .meta-line { font-size: 12px; color: #555; }
 
     @media (max-height: 720px) {
       .screen { padding-top: 42px; }
-      .screen-default h1 {
-        margin-bottom: 26px;
-        font-size: 24px;
-      }
+      .screen-default h1 { margin-bottom: 26px; font-size: 24px; }
+
+      /* keep the "big title" feeling on shorter phones */
+      .album-meta h3 { font-size: 48px; line-height: 0.98; }
+      .album-meta h2 { font-size: 18px; margin-bottom: 12px; }
     }
 
     #labelCanvas { display: none; }
@@ -581,7 +581,6 @@
     <section class="screen screen-results" aria-label="Scan results">
       <div class="results-top">
         <div class="album-art">
-          <!-- IMPORTANT: no crossorigin here, so the cover always displays -->
           <img id="discogsCover" alt="Album cover" />
         </div>
         <div class="album-label-circle"></div>
@@ -663,17 +662,13 @@
     const overlay = document.getElementById("resultsOverlay");
     const overlayClose = document.getElementById("overlayClose");
 
-    // elements that get the label texture
     const processingRecordLabel = document.querySelector(".screen-processing .record-label");
     const albumLabelCircle = document.querySelector(".album-label-circle");
 
     let currentDiscogsUrl = "";
     let currentGoogleQuery = "";
 
-    // NEW: keep the label crop data URL for color sampling
     let currentLabelDataUrl = "";
-
-    // NEW: a temporary cover sampler image (CORS-enabled attempt)
     let coverSamplerImg = null;
 
     captureHitArea.addEventListener("click", () => fileInput.click());
@@ -684,7 +679,6 @@
       app.classList.remove("show-results");
       app.classList.remove("show-processing");
 
-      // reset label textures
       if (processingRecordLabel) {
         processingRecordLabel.style.backgroundImage = "";
         processingRecordLabel.style.backgroundColor = "#fff";
@@ -722,7 +716,6 @@
       coverSamplerImg = null;
       setResultsAccentRgb([180, 0, 0]);
 
-      // reset label textures
       if (processingRecordLabel) {
         processingRecordLabel.style.backgroundImage = "";
         processingRecordLabel.style.backgroundColor = "#fff";
@@ -748,10 +741,8 @@
       canvas.width = size;
       canvas.height = size;
 
-      // Draw the cropped, COLOR square first
       ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
 
-      // Use that crop as the label texture on both records
       try {
         const labelDataUrl = canvas.toDataURL("image/png");
         currentLabelDataUrl = labelDataUrl;
@@ -764,13 +755,11 @@
           albumLabelCircle.style.backgroundImage = `url(${labelDataUrl})`;
         }
 
-        // NEW: update gradient immediately based on the label
         updateResultsGradient();
       } catch (e) {
         console.error("Error creating label data URL", e);
       }
 
-      // Now convert the same crop to grayscale for OCR
       const imageData = ctx.getImageData(0, 0, size, size);
       const data = imageData.data;
       for (let i = 0; i < data.length; i += 4) {
@@ -900,14 +889,10 @@
         currentDiscogsUrl = result.discogsUrl || "";
 
         if (result.coverImage) {
-          // IMPORTANT: cover always loads without CORS so it reliably displays
           discogsCover.removeAttribute("crossorigin");
           discogsCover.src = result.coverImage;
 
-          // Optional: try to sample the cover color via a separate CORS image (won't affect display)
           trySampleCoverColor(result.coverImage);
-
-          // Update gradient now (label-driven), and again if sampler succeeds
           updateResultsGradient();
         } else {
           discogsCover.removeAttribute("src");
@@ -953,10 +938,6 @@
     discogsButton.addEventListener("click", openDiscogs);
     overlayDiscogsButton.addEventListener("click", openDiscogs);
 
-    /* =========================================================
-       Dynamic results gradient color (dominant color + readability)
-       ========================================================= */
-
     function setResultsAccentRgb(rgb) {
       document.documentElement.style.setProperty("--results-rgb", `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`);
     }
@@ -969,7 +950,6 @@
         updateResultsGradient();
       };
       img.onerror = () => {
-        // CORS failed or host blocked it — no problem; keep label-based color
         coverSamplerImg = null;
       };
       img.src = url;
@@ -977,11 +957,7 @@
 
     function updateResultsGradient() {
       const sources = [];
-
-      // Always prefer label (local data URL, never CORS-tainted)
       if (currentLabelDataUrl) sources.push({ type: "dataUrl", value: currentLabelDataUrl, weight: 1.2 });
-
-      // If the cover sampler succeeded (with CORS), blend it in
       if (coverSamplerImg) sources.push({ type: "imgEl", value: coverSamplerImg, weight: 1.0 });
 
       if (!sources.length) {
@@ -1016,14 +992,10 @@
             const sat = max - min;
             const bright = (r + g + b) / 3;
 
-            // Ignore near-black and glare whites
             if (bright < 18) continue;
             if (bright > 245 && sat < 10) continue;
-
-            // Ignore very low-sat bright pixels
             if (sat < 8 && bright > 180) continue;
 
-            // Quantize (5 bits/channel)
             const rq = r >> 3;
             const gq = g >> 3;
             const bq = b >> 3;
@@ -1032,9 +1004,7 @@
             const add = (s.weight || 1);
             buckets.set(key, (buckets.get(key) || 0) + add);
           }
-        } catch (e) {
-          // ignore failures per-source
-        }
+        } catch (e) {}
       }
 
       if (!buckets.size) return [18, 18, 18];
@@ -1052,7 +1022,6 @@
       const gq = (bestKey >> 5) & 31;
       const bq = bestKey & 31;
 
-      // De-quantize to center of bin
       return [
         Math.min(255, (rq << 3) + 4),
         Math.min(255, (gq << 3) + 4),
@@ -1068,8 +1037,6 @@
       const tctx = tmp.getContext("2d", { willReadFrequently: true });
 
       if (source.type === "dataUrl") {
-        // data URLs are local; load quickly, but still async — so we do a small sync-ish shortcut:
-        // draw from an Image that we know is very likely cached; if not complete, skip this pass.
         const img = new Image();
         img.src = source.value;
         if (!img.complete) return null;
@@ -1089,11 +1056,8 @@
 
     function ensureReadableOnWhite(rgb) {
       const [r, g, b] = rgb;
-
-      // If dominant is basically white, use dark gray
       if (r > 235 && g > 235 && b > 235) return [18, 18, 18];
 
-      // Darken until contrast with white is decent
       let out = [r, g, b];
       let tries = 0;
       while (contrastRatio(out, [255, 255, 255]) < 4.5 && tries < 12) {
