@@ -855,11 +855,16 @@
       box-shadow: 0 18px 40px rgba(0,0,0,0.24);
       background: rgba(255,255,255,0.10);
       backdrop-filter: blur(10px);
+      --tilt: 0deg;
+      --cardScale: 1;
+      transform: rotate(var(--tilt)) scale(var(--cardScale));
+      transform-origin: 50% 60%;
+      will-change: transform;
     }
     .detail-card.ghost{
       pointer-events: none;
       opacity: 0.70;
-      transform: scale(0.985);
+      --cardScale: 0.985;
     }
     /* Make the existing detail layout fill the card */
     .detail-card .detail-top{ flex: 0 0 56%; }
@@ -881,6 +886,17 @@
     .detail-card .detail-bottom-row.detail-label-only{
       justify-content: left;
       gap: 0;
+
+    /* Smoothly fade the *center* card content when swapping records (avoids "awkward" load pop) */
+    .detail-card.active .detail-top,
+    .detail-card.active .detail-bottom{
+      transition: opacity 170ms ease-out, transform 170ms ease-out;
+    }
+    .detail-card.active.is-swapping .detail-top,
+    .detail-card.active.is-swapping .detail-bottom{
+      opacity: 0;
+      transform: translateY(10px);
+    }
     }
 
     .detail-fixed-actions{
@@ -1849,6 +1865,25 @@
 
     
 
+
+    function preloadRecordAssets(rec) {
+      if (!rec) return;
+      // Covers may be cross-origin; preloading still helps avoid visible "pop" when swapping.
+      if (rec.coverImage) {
+        const img = new Image();
+        img.decoding = "async";
+        img.loading = "eager";
+        img.src = rec.coverImage;
+      }
+      // labelThumb is a data URL (same-origin) — preloading is cheap and reliable.
+      if (rec.labelThumb) {
+        const img2 = new Image();
+        img2.decoding = "async";
+        img2.loading = "eager";
+        img2.src = rec.labelThumb;
+      }
+    }
+
     function renderGhostCard(rec, which) {
       if (!rec) return;
       if (which === "prev") {
@@ -1870,11 +1905,44 @@
       const target = mid.offsetLeft - (detailCarousel.clientWidth - mid.clientWidth) / 2;
       _recenterLock = true;
       detailCarousel.scrollLeft = target;
+       scheduleDetailTilt();
       // release on next frame
       requestAnimationFrame(() => { _recenterLock = false; });
     }
 
-    function renderDetailCarousel() {
+// Live tilt/scale while swiping the detail carousel
+let _tiltRaf = 0;
+function updateDetailCardTilts() {
+  if (!detailCarousel) return;
+  const cards = Array.from(detailCarousel.children);
+  if (!cards.length) return;
+
+  const cx = detailCarousel.scrollLeft + detailCarousel.clientWidth / 2;
+
+  // Use the center card width as reference
+  const ref = cards[1] || cards[0];
+  const w = Math.max(1, ref.clientWidth);
+
+  for (const c of cards) {
+    const center = c.offsetLeft + c.clientWidth / 2;
+    let t = (center - cx) / w;              // ~ -1 (left), 0 (center), +1 (right)
+    t = Math.max(-1, Math.min(1, t));
+    const tilt = t * 2;                     // degrees: -2 .. +2
+    const sc = 1 - Math.abs(t) * 0.015;     // subtle scale down at edges
+    c.style.setProperty("--tilt", tilt.toFixed(3) + "deg");
+    c.style.setProperty("--cardScale", sc.toFixed(3));
+  }
+}
+function scheduleDetailTilt() {
+  if (_tiltRaf) return;
+  _tiltRaf = requestAnimationFrame(() => {
+    _tiltRaf = 0;
+    updateDetailCardTilts();
+  });
+}
+
+
+    function renderDetailCarousel(opts = {}) {
       const sorted = getSortedCatalog();
       if (!sorted.length) {
         showCatalog();
@@ -1882,9 +1950,20 @@
       }
       detailIndex = (detailIndex + sorted.length) % sorted.length;
 
+      const activeCard = detailCarousel ? detailCarousel.children[1] : null;
+      if (activeCard && opts.animate) {
+        activeCard.classList.add("is-swapping");
+      }
+
       const prev = sorted[(detailIndex - 1 + sorted.length) % sorted.length];
       const cur  = sorted[detailIndex];
       const next = sorted[(detailIndex + 1) % sorted.length];
+
+      // Preload assets for smoother swaps
+      preloadRecordAssets(prev);
+      preloadRecordAssets(cur);
+      preloadRecordAssets(next);
+
 
       renderGhostCard(prev, "prev");
       renderGhostCard(next, "next");
@@ -1894,11 +1973,19 @@
 
       // keep the interactive card centered so the user always swipes from the middle
       requestAnimationFrame(snapDetailToMiddle);
+
+      if (activeCard && opts.animate) {
+        // Let DOM apply the new content, then fade in
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => activeCard.classList.remove("is-swapping"));
+        });
+      }
     }
 
     if (detailCarousel) {
       let scrollTimer = null;
       detailCarousel.addEventListener("scroll", () => {
+        scheduleDetailTilt();
         if (_recenterLock) return;
         if (scrollTimer) clearTimeout(scrollTimer);
         scrollTimer = setTimeout(() => {
@@ -1917,11 +2004,11 @@
           if (bestI === 0) {
             detailIndex = (detailIndex - 1 + getSortedCatalog().length) % getSortedCatalog().length;
             detailShowLabel = false;
-            renderDetailCarousel();
+            renderDetailCarousel({ animate: true });
           } else if (bestI === 2) {
             detailIndex = (detailIndex + 1) % getSortedCatalog().length;
             detailShowLabel = false;
-            renderDetailCarousel();
+            renderDetailCarousel({ animate: true });
           } else {
             snapDetailToMiddle();
           }
