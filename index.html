@@ -1074,6 +1074,7 @@
     let currentLabelThumbDataUrl = "";
     let coverSamplerImg = null;
     let labelSamplerImg = null;
+    let currentAccentRgb = [180, 0, 0];
 
     // Catalog state
     const LS_KEY = "33anda3rd_catalog_v1";
@@ -1573,6 +1574,7 @@
         discogsUrl,
         coverImage,
         labelThumb: currentLabelThumbDataUrl || currentLabelDataUrl || "",
+        accentRgb: (Array.isArray(currentAccentRgb) ? currentAccentRgb.slice(0,3) : [180,0,0]),
         createdAt: Date.now()
       };
     }
@@ -1689,10 +1691,22 @@
       detailArtist.textContent = rec.artist || "Unknown artist";
       detailTitle.textContent = rec.title || "(untitled)";
 
-      // Set gradient based on cover+label (reuse)
+      // Set gradient for detail:
+      // 1) Prefer stored color from the original scan (works even if cover-image sampling is blocked by CORS).
+      // 2) Also attempt to re-sample from the saved labelThumb (data URL) + cover (if CORS allows).
       coverSamplerImg = null;
       labelSamplerImg = null;
-      setResultsAccentRgb([180,0,0]);
+
+      if (Array.isArray(rec.accentRgb) && rec.accentRgb.length >= 3) {
+        setResultsAccentRgb(rec.accentRgb);
+      } else {
+        setResultsAccentRgb([180, 0, 0]);
+      }
+
+      // Label thumb is a data URL (same-origin), so we can always sample it.
+      setLabelSampler(rec.labelThumb || "");
+
+      // Cover sampling may fail if the host blocks CORS — that's ok; label sampling will still drive the gradient.
       if (rec.coverImage) {
         trySampleCoverColor(rec.coverImage);
       } else {
@@ -1848,6 +1862,7 @@ Importing merges by discogsUrl (or artist+title fallback).`);
             discogsUrl: String(r.discogsUrl || "").trim(),
             coverImage: String(r.coverImage || "").trim(),
             labelThumb: String(r.labelThumb || "").trim(),
+            accentRgb: (Array.isArray(r.accentRgb) && r.accentRgb.length >= 3) ? r.accentRgb.slice(0,3).map(v => Math.max(0, Math.min(255, Number(v)||0))) : undefined,
             createdAt: (typeof r.createdAt === "number") ? r.createdAt : Date.now()
           };
           const id = stableIdForRecord(cleaned);
@@ -1875,7 +1890,8 @@ Importing merges by discogsUrl (or artist+title fallback).`);
     // Gradient sampling (unchanged)
     // -----------------------------
     function setResultsAccentRgb(rgb) {
-      document.documentElement.style.setProperty("--results-rgb", `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`);
+      currentAccentRgb = Array.isArray(rgb) ? rgb.slice(0, 3) : [180, 0, 0];
+      document.documentElement.style.setProperty("--results-rgb", `${currentAccentRgb[0]}, ${currentAccentRgb[1]}, ${currentAccentRgb[2]}`);
     }
 
     
