@@ -241,7 +241,7 @@
     }
     .tonearm {
       position: absolute;
-      width: 52%;
+      width: 58%;
       right: -25%;
       top: 3%;
       transform: rotate(5deg);
@@ -817,7 +817,68 @@
     }
 
     #labelCanvas, #thumbCanvas { display: none; }
-  </style>
+  
+    /* --- Catalog detail carousel (card swipe) --- */
+    .screen.screen-detail{
+      align-items: stretch;
+      justify-content: flex-start;
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .screen.screen-detail .back-link{
+      left: 18px;
+    }
+    .detail-carousel{
+      flex: 1;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 5vw 18px;
+      margin-top: 44px; /* leaves space for Back to catalog */
+    }
+    .detail-carousel::-webkit-scrollbar{ display:none; }
+    .detail-card{
+      flex: 0 0 90vw;
+      height: calc(100vh - 140px);
+      display: flex;
+      flex-direction: column;
+      max-height: 900px;
+      scroll-snap-align: center;
+      border-radius: 34px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.24);
+      background: rgba(255,255,255,0.10);
+      backdrop-filter: blur(10px);
+    }
+    .detail-card.ghost{
+      pointer-events: none;
+      opacity: 0.70;
+      transform: scale(0.985);
+    }
+    /* Make the existing detail layout fill the card */
+    .detail-card .detail-top{ flex: 0 0 56%; }
+    .detail-card .detail-bottom{ flex: 1; }
+
+    /* Ensure cover + text scale correctly inside the card */
+    .detail-card .detail-top img,
+    #detailCover{
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    /* Keep the text from hiding under the bottom button row */
+    .detail-card .detail-bottom{
+      padding-bottom: 120px; /* room for record/show/discogs row */
+    }
+
+</style>
 </head>
 <body>
   <div class="app" id="app">
@@ -951,7 +1012,24 @@
     <section class="screen screen-detail" aria-label="Record detail">
       <button class="back-link" id="backToCatalogBtn" type="button">Back to catalog</button>
 
-      <div class="detail-top" id="detailTop">
+      
+      <div class="detail-carousel" id="detailCarousel" aria-label="Swipe between catalog records">
+        <div class="detail-card ghost" aria-hidden="true">
+          <div class="detail-top">
+            <div class="album-art">
+              <img id="prevCover" alt="Previous album cover" />
+            </div>
+            <div class="detail-bottom" style="background: rgba(0,0,0,0.20), url('maple.png') center/cover no-repeat;">
+              <div class="detail-text">
+                <div class="detail-artist" id="prevArtist"> </div>
+                <div class="detail-title" id="prevTitle"> </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-card active">
+          <div class="detail-top" id="detailTop">
         <div class="album-art">
           <img id="detailCover" alt="Album cover" />
         </div>
@@ -989,8 +1067,26 @@
             <span>Discogs</span>
           </button>
         </div>
+      
+          </div>
+        </div>
+
+        <div class="detail-card ghost" aria-hidden="true">
+          <div class="detail-top">
+            <div class="album-art">
+              <img id="nextCover" alt="Next album cover" />
+            </div>
+            <div class="detail-bottom" style="background: rgba(0,0,0,0.20), url('maple.png') center/cover no-repeat;">
+              <div class="detail-text">
+                <div class="detail-artist" id="nextArtist"> </div>
+                <div class="detail-title" id="nextTitle"> </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
+
 
     <div class="toast" id="toast" aria-live="polite"></div>
 
@@ -1065,7 +1161,15 @@
     const detailNewScanBtn = document.getElementById("detailNewScanBtn");
     const detailTop = document.getElementById("detailTop");
 
-    // Toast
+    
+    const detailCarousel = document.getElementById("detailCarousel");
+    const prevCover = document.getElementById("prevCover");
+    const prevArtist = document.getElementById("prevArtist");
+    const prevTitle = document.getElementById("prevTitle");
+    const nextCover = document.getElementById("nextCover");
+    const nextArtist = document.getElementById("nextArtist");
+    const nextTitle = document.getElementById("nextTitle");
+// Toast
     const toast = document.getElementById("toast");
 
     let currentDiscogsUrl = "";
@@ -1659,7 +1763,7 @@
         row.addEventListener("click", () => {
           detailIndex = idx;
           detailShowLabel = false;
-          renderDetailFromIndex();
+          renderDetailCarousel();
           showDetail();
         });
 
@@ -1722,7 +1826,91 @@
       setStarVisual(detailStarBtn, true);
     }
 
-    toggleLabelBtn.addEventListener("click", () => {
+    
+
+    function renderGhostCard(rec, which) {
+      if (!rec) return;
+      if (which === "prev") {
+        prevCover.src = rec.coverImage || "";
+        prevArtist.textContent = rec.artist || "Unknown artist";
+        prevTitle.textContent = rec.title || "(untitled)";
+      } else {
+        nextCover.src = rec.coverImage || "";
+        nextArtist.textContent = rec.artist || "Unknown artist";
+        nextTitle.textContent = rec.title || "(untitled)";
+      }
+    }
+
+    let _recenterLock = false;
+    function snapDetailToMiddle() {
+      if (!detailCarousel) return;
+      const mid = detailCarousel.children[1];
+      if (!mid) return;
+      const target = mid.offsetLeft - (detailCarousel.clientWidth - mid.clientWidth) / 2;
+      _recenterLock = true;
+      detailCarousel.scrollLeft = target;
+      // release on next frame
+      requestAnimationFrame(() => { _recenterLock = false; });
+    }
+
+    function renderDetailCarousel() {
+      const sorted = getSortedCatalog();
+      if (!sorted.length) {
+        showCatalog();
+        return;
+      }
+      detailIndex = (detailIndex + sorted.length) % sorted.length;
+
+      const prev = sorted[(detailIndex - 1 + sorted.length) % sorted.length];
+      const cur  = sorted[detailIndex];
+      const next = sorted[(detailIndex + 1) % sorted.length];
+
+      renderGhostCard(prev, "prev");
+      renderGhostCard(next, "next");
+
+      // center card is the real interactive view
+      renderDetailFromIndex();
+
+      // keep the interactive card centered so the user always swipes from the middle
+      requestAnimationFrame(snapDetailToMiddle);
+    }
+
+    if (detailCarousel) {
+      let scrollTimer = null;
+      detailCarousel.addEventListener("scroll", () => {
+        if (_recenterLock) return;
+        if (scrollTimer) clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => {
+          if (_recenterLock) return;
+
+          const cx = detailCarousel.scrollLeft + detailCarousel.clientWidth / 2;
+          const cards = Array.from(detailCarousel.children);
+          let bestI = 1, bestD = Infinity;
+          for (let i = 0; i < cards.length; i++) {
+            const c = cards[i];
+            const center = c.offsetLeft + c.clientWidth / 2;
+            const d = Math.abs(center - cx);
+            if (d < bestD) { bestD = d; bestI = i; }
+          }
+
+          if (bestI === 0) {
+            detailIndex = (detailIndex - 1 + getSortedCatalog().length) % getSortedCatalog().length;
+            detailShowLabel = false;
+            renderDetailCarousel();
+          } else if (bestI === 2) {
+            detailIndex = (detailIndex + 1) % getSortedCatalog().length;
+            detailShowLabel = false;
+            renderDetailCarousel();
+          } else {
+            snapDetailToMiddle();
+          }
+        }, 120);
+      }, { passive: true });
+
+      window.addEventListener("resize", () => requestAnimationFrame(snapDetailToMiddle));
+    }
+
+toggleLabelBtn.addEventListener("click", () => {
       detailShowLabel = !detailShowLabel;
       detailLabelCircle.classList.toggle("show", !!detailShowLabel);
       toggleLabelText.textContent = detailShowLabel ? "Hide" : "Show";
@@ -1747,7 +1935,7 @@
         }
         detailIndex = Math.min(detailIndex, after.length - 1);
         renderCatalog(); // keep list in sync
-        renderDetailFromIndex();
+        renderDetailCarousel();
       }
     });
 
@@ -1756,20 +1944,8 @@
       if (!sorted.length) return;
       detailIndex = (detailIndex + delta + sorted.length) % sorted.length;
       detailShowLabel = false;
-      renderDetailFromIndex();
+      renderDetailCarousel();
     }
-
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchTracking = false;
-
-    detailTop.addEventListener("touchstart", (e) => {
-      if (!e.touches || e.touches.length !== 1) return;
-      touchTracking = true;
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    }, { passive: true });
-
     detailTop.addEventListener("touchend", (e) => {
       if (!touchTracking) return;
       touchTracking = false;
