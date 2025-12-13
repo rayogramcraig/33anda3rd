@@ -729,7 +729,7 @@
       border: none;
       background: transparent;
       font-family: var(--font-main);
-      font-size: 34px;
+      font-size: 22px;
       font-weight: 700;
       color: #000;
       cursor: pointer;
@@ -838,13 +838,13 @@
       overflow-y: hidden;
       scroll-snap-type: x mandatory;
       -webkit-overflow-scrolling: touch;
-      padding: 0 5vw 18px;
+      padding: 0 6.5vw 120px;
       margin-top: 44px; /* leaves space for Back to catalog */
     }
     .detail-carousel::-webkit-scrollbar{ display:none; }
     .detail-card{
-      flex: 0 0 90vw;
-      height: calc(100vh - 140px);
+      flex: 0 0 85vw;
+      height: calc(100vh - 200px);
       display: flex;
       flex-direction: column;
       max-height: 900px;
@@ -876,6 +876,25 @@
     /* Keep the text from hiding under the bottom button row */
     .detail-card .detail-bottom{
       padding-bottom: 120px; /* room for record/show/discogs row */
+    }
+
+    .detail-card .detail-bottom-row.detail-label-only{
+      justify-content: left;
+      gap: 0;
+    }
+
+    .detail-fixed-actions{
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 18px;
+      width: 85vw;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      z-index: 60;
+      pointer-events: auto;
     }
 
 </style>
@@ -1050,24 +1069,13 @@
           <h3 id="detailTitle">Title</h3>
         </div>
 
-        <div class="detail-bottom-row">
-          <button class="retake-button" type="button" id="detailNewScanBtn" aria-label="New scan">
-            <div class="mini-record">
-              <div class="mini-label"></div>
-            </div>
-          </button>
-
+        <div class="detail-bottom-row detail-label-only">
           <button class="label-toggle-button" id="toggleLabelBtn" type="button" aria-label="Show label">
             <span id="toggleLabelText">Show</span>
             <span>Label</span>
           </button>
-
-          <button class="discogs-button" type="button" id="detailDiscogsBtn" aria-label="Open release on Discogs">
-            <span class="play-icon" aria-hidden="true"></span>
-            <span>Discogs</span>
-          </button>
         </div>
-      
+
           </div>
         </div>
 
@@ -1084,6 +1092,19 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="detail-fixed-actions" id="detailFixedActions" aria-label="Detail actions">
+        <button class="retake-button" type="button" id="detailNewScanBtn" aria-label="New scan">
+          <div class="mini-record">
+            <div class="mini-label"></div>
+          </div>
+        </button>
+
+        <button class="discogs-button" type="button" id="detailDiscogsBtn" aria-label="Open release on Discogs">
+          <span class="play-icon" aria-hidden="true"></span>
+          <span>Discogs</span>
+        </button>
       </div>
     </section>
 
@@ -1946,22 +1967,7 @@ toggleLabelBtn.addEventListener("click", () => {
       detailShowLabel = false;
       renderDetailCarousel();
     }
-    detailTop.addEventListener("touchend", (e) => {
-      if (!touchTracking) return;
-      touchTracking = false;
-
-      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
-      if (!t) return;
-      const dx = t.clientX - touchStartX;
-      const dy = t.clientY - touchStartY;
-
-      if (Math.abs(dx) < 45) return;
-      if (Math.abs(dx) < Math.abs(dy) * 1.4) return; // mostly horizontal
-
-      if (dx < 0) swipeTo(+1);
-      else swipeTo(-1);
-    }, { passive: true });
-
+    
     // -----------------------------
     // Export / Import (ZIP)
     // -----------------------------
