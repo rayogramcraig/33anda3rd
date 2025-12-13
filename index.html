@@ -1866,26 +1866,50 @@
     
 
 
-    function preloadRecordAssets(rec) {
-      if (!rec) return;
-      // Covers may be cross-origin; preloading still helps avoid visible "pop" when swapping.
-      if (rec.coverImage) {
+    function preloadImage(url) {
+      return new Promise((resolve) => {
+        if (!url) return resolve();
         const img = new Image();
         img.decoding = "async";
         img.loading = "eager";
-        img.src = rec.coverImage;
-      }
-      // labelThumb is a data URL (same-origin) — preloading is cheap and reliable.
-      if (rec.labelThumb) {
-        const img2 = new Image();
-        img2.decoding = "async";
-        img2.loading = "eager";
-        img2.src = rec.labelThumb;
-      }
+        img.onload = () => resolve();
+        img.onerror = () => resolve(); // don't block on errors/CORS
+        img.src = url;
+        // If decode is available, prefer it (it can finish after onload on some browsers)
+        if (img.decode) {
+          img.decode().then(resolve).catch(() => resolve());
+        }
+      });
+    }
+
+    function preloadRecordAssets(rec) {
+      if (!rec) return Promise.resolve();
+      const tasks = [];
+      if (rec.coverImage) tasks.push(preloadImage(rec.coverImage));
+      if (rec.labelThumb) tasks.push(preloadImage(rec.labelThumb));
+      return Promise.all(tasks).then(() => undefined);
+    }
+function setGhostCardAccent(which, rgb) {
+      // apply per-card accent so we don't flash the active card's red while images/colors settle
+      const card = (which === "prev")
+        ? detailCarousel?.children?.[0]
+        : detailCarousel?.children?.[2];
+      if (!card) return;
+      const bottom = card.querySelector(".detail-bottom");
+      if (!bottom) return;
+
+      const safe = (Array.isArray(rgb) && rgb.length >= 3) ? rgb : [40, 40, 40];
+      bottom.style.setProperty("--card-r", safe[0]);
+      bottom.style.setProperty("--card-g", safe[1]);
+      bottom.style.setProperty("--card-b", safe[2]);
+      bottom.style.background =
+        `linear-gradient(180deg, rgba(${safe[0]},${safe[1]},${safe[2]},0.00) 0%, rgba(${safe[0]},${safe[1]},${safe[2]},0.92) 58%, rgba(${safe[0]},${safe[1]},${safe[2]},0.98) 100%), url('maple.png') center/cover no-repeat`;
     }
 
     function renderGhostCard(rec, which) {
       if (!rec) return;
+
+      // content
       if (which === "prev") {
         prevCover.src = rec.coverImage || "";
         prevArtist.textContent = rec.artist || "Unknown artist";
@@ -1894,6 +1918,14 @@
         nextCover.src = rec.coverImage || "";
         nextArtist.textContent = rec.artist || "Unknown artist";
         nextTitle.textContent = rec.title || "(untitled)";
+      }
+
+      // style (prefer stored accent)
+      if (Array.isArray(rec.accentRgb) && rec.accentRgb.length >= 3) {
+        setGhostCardAccent(which, rec.accentRgb);
+      } else {
+        // fall back to a neutral dark, so we never flash bright/red
+        setGhostCardAccent(which, [40, 40, 40]);
       }
     }
 
@@ -1960,12 +1992,10 @@ function scheduleDetailTilt() {
       const next = sorted[(detailIndex + 1) % sorted.length];
 
       // Preload assets for smoother swaps
-      preloadRecordAssets(prev);
-      preloadRecordAssets(cur);
-      preloadRecordAssets(next);
-
-
-      renderGhostCard(prev, "prev");
+      const _prevReady = preloadRecordAssets(prev);
+      const _curReady  = preloadRecordAssets(cur);
+      const _nextReady = preloadRecordAssets(next);
+renderGhostCard(prev, "prev");
       renderGhostCard(next, "next");
 
       // center card is the real interactive view
@@ -1975,12 +2005,23 @@ function scheduleDetailTilt() {
       requestAnimationFrame(snapDetailToMiddle);
 
       if (activeCard && opts.animate) {
-        // Let DOM apply the new content, then fade in
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => activeCard.classList.remove("is-swapping"));
-        });
+        // Fade-in only after the new center assets are ready (avoids "pop" on swipe settle)
+        const waitForCover = () => {
+          try {
+            return (detailCover && detailCover.decode) ? detailCover.decode().catch(() => {}) : Promise.resolve();
+          } catch (e) {
+            return Promise.resolve();
+          }
+        };
+
+        Promise.all([_curReady, waitForCover()])
+          .finally(() => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => activeCard.classList.remove("is-swapping"));
+            });
+          });
       }
-    }
+}
 
     if (detailCarousel) {
       let scrollTimer = null;
