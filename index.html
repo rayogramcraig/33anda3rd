@@ -928,8 +928,15 @@
     }
 
     .detail-card .detail-bottom-row.detail-label-only{
+      /* Pin label button to a consistent spot inside the card (independent of title height) */
+      position: absolute;
+      left: 24px;
+      bottom: 24px;
+      right: auto;
+      width: auto;
       justify-content: left;
       gap: 0;
+      z-index: 65;
     }
 
     /* Smoothly fade the *center* card content when swapping records (avoids "awkward" load pop) */
