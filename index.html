@@ -347,7 +347,7 @@
           rgba(var(--results-rgb), 0.40) 80%,
           rgba(var(--results-rgb), 0.00) 100%
         ),
-        url("maple.png") center/cover no-repeat;
+        center/cover no-repeat;
 
       padding: 24px 24px 26px;
       color: #fff;
@@ -678,7 +678,7 @@
 	.catalog-bottom-bar{
 	  background:
 	  linear-gradient(to top, rgba(82, 53, 53, 0.53), rgba(255, 255, 255, 0.35)),
-	  url("maple.png") center/cover no-repeat
+	  center/cover no-repeat
 	  backdrop-filter: blur(2px);
 	  -webkit-backdrop-filter: blur(2px);
 	}
@@ -1942,7 +1942,7 @@ function setGhostCardAccent(which, rgb) {
       bottom.style.setProperty("--card-g", safe[1]);
       bottom.style.setProperty("--card-b", safe[2]);
       bottom.style.background =
-        `linear-gradient(180deg, rgba(${safe[0]},${safe[1]},${safe[2]},0.00) 0%, rgba(${safe[0]},${safe[1]},${safe[2]},0.92) 58%, rgba(${safe[0]},${safe[1]},${safe[2]},0.98) 100%), url('maple.png') center/cover no-repeat`;
+        `linear-gradient(180deg, rgba(${safe[0]},${safe[1]},${safe[2]},0.00) 0%, rgba(${safe[0]},${safe[1]},${safe[2]},0.92) 58%, rgba(${safe[0]},${safe[1]},${safe[2]},0.98) 100%), center/cover no-repeat`;
     }
 
     function renderGhostCard(rec, which) {
