@@ -19,51 +19,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="manifest.webmanifest" />
 
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js">
-
-  // --- Detail bottom fade-in on settle (safe: does not alter nav/link handlers) ---
-  (function(){
-    const carousel = document.getElementById('detailCarousel');
-    if (!carousel || !window.MutationObserver) return;
-
-    let lastActive = null;
-
-    function triggerFade(card){
-      if (!card) return;
-      // Restart animation reliably.
-      card.classList.add('bottom-enter');
-      // Force style flush to ensure the transition runs.
-      void card.offsetHeight;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          card.classList.remove('bottom-enter');
-        });
-      });
-    }
-
-    function findActive(){
-      return carousel.querySelector('.detail-card.active');
-    }
-
-    // Trigger once when detail view is first shown (in case active already exists).
-    const initial = findActive();
-    if (initial) {
-      lastActive = initial;
-      triggerFade(initial);
-    }
-
-    const obs = new MutationObserver(() => {
-      const active = findActive();
-      if (active && active !== lastActive) {
-        lastActive = active;
-        triggerFade(active);
-      }
-    });
-
-    obs.observe(carousel, { subtree: true, attributes: true, attributeFilter: ['class'] });
-  })();
-
-</script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <link rel="stylesheet" href="https://use.typekit.net/zxp4dru.css">
 
@@ -912,7 +868,9 @@
     }
     /* Make the existing detail layout fill the card */
     .detail-card .detail-top{ flex: 0 0 56%; }
-    .detail-card .detail-bottom{ flex: 1; }
+    .detail-card .detail-bottom{ flex: 1; 
+      opacity: 1;
+    }
 
     /* Ensure cover + text scale correctly inside the card */
     .detail-card .detail-top img,
@@ -928,15 +886,8 @@
     }
 
     .detail-card .detail-bottom-row.detail-label-only{
-      /* Pin label button to a consistent spot inside the card (independent of title height) */
-      position: absolute;
-      left: 24px;
-      bottom: 24px;
-      right: auto;
-      width: auto;
       justify-content: left;
       gap: 0;
-      z-index: 65;
     }
 
     /* Smoothly fade the *center* card content when swapping records (avoids "awkward" load pop) */
@@ -997,8 +948,8 @@
     }
     .detail-card.bottom-enter .detail-bottom{
       opacity: 0;
-      transform: translateY(12px);
       pointer-events: none;
+    
     }
 
 </style>
@@ -2032,6 +1983,8 @@ function setGhostCardAccent(which, rgb) {
 
 // Live tilt/scale while swiping the detail carousel
 let _tiltRaf = 0;
+let _lastCenterDetailCard = null;
+
 function updateDetailCardTilts() {
   if (!detailCarousel) return;
   const cards = Array.from(detailCarousel.children);
@@ -2043,6 +1996,9 @@ function updateDetailCardTilts() {
   const ref = cards[1] || cards[0];
   const w = Math.max(1, ref.clientWidth);
 
+  let best = null;
+  let bestAbs = 1e9;
+
   for (const c of cards) {
     const center = c.offsetLeft + c.clientWidth / 2;
     let t = (center - cx) / w;              // ~ -1 (left), 0 (center), +1 (right)
@@ -2051,8 +2007,33 @@ function updateDetailCardTilts() {
     const sc = 1 - Math.abs(t) * 0.015;     // subtle scale down at edges
     c.style.setProperty("--tilt", tilt.toFixed(3) + "deg");
     c.style.setProperty("--cardScale", sc.toFixed(3));
+
+    const a = Math.abs(t);
+    if (a < bestAbs) {
+      bestAbs = a;
+      best = c;
+    }
+  }
+
+  // Mark the most-centered card and trigger the slow bottom fade-in when it changes.
+  if (best && best !== _lastCenterDetailCard) {
+    if (_lastCenterDetailCard) _lastCenterDetailCard.classList.remove("is-center");
+    cards.forEach(el => { if (el !== best) el.classList.remove("is-center"); });
+    best.classList.add("is-center");
+
+    // Restart bottom fade-in (mobile Safari-friendly: ensure a paint between states)
+    best.classList.add("bottom-enter");
+    void best.offsetWidth;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        best.classList.remove("bottom-enter");
+      });
+    });
+
+    _lastCenterDetailCard = best;
   }
 }
+
 function scheduleDetailTilt() {
   if (_tiltRaf) return;
   _tiltRaf = requestAnimationFrame(() => {
