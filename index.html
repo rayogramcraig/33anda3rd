@@ -19,7 +19,51 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="manifest.webmanifest" />
 
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js">
+
+  // --- Detail bottom fade-in on settle (safe: does not alter nav/link handlers) ---
+  (function(){
+    const carousel = document.getElementById('detailCarousel');
+    if (!carousel || !window.MutationObserver) return;
+
+    let lastActive = null;
+
+    function triggerFade(card){
+      if (!card) return;
+      // Restart animation reliably.
+      card.classList.add('bottom-enter');
+      // Force style flush to ensure the transition runs.
+      void card.offsetHeight;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          card.classList.remove('bottom-enter');
+        });
+      });
+    }
+
+    function findActive(){
+      return carousel.querySelector('.detail-card.active');
+    }
+
+    // Trigger once when detail view is first shown (in case active already exists).
+    const initial = findActive();
+    if (initial) {
+      lastActive = initial;
+      triggerFade(initial);
+    }
+
+    const obs = new MutationObserver(() => {
+      const active = findActive();
+      if (active && active !== lastActive) {
+        lastActive = active;
+        triggerFade(active);
+      }
+    });
+
+    obs.observe(carousel, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  })();
+
+</script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <link rel="stylesheet" href="https://use.typekit.net/zxp4dru.css">
 
@@ -886,6 +930,7 @@
     .detail-card .detail-bottom-row.detail-label-only{
       justify-content: left;
       gap: 0;
+    }
 
     /* Smoothly fade the *center* card content when swapping records (avoids "awkward" load pop) */
     .detail-card.active .detail-top,
@@ -896,7 +941,6 @@
     .detail-card.active.is-swapping .detail-bottom{
       opacity: 0;
       transform: translateY(10px);
-    }
     }
 
     .detail-fixed-actions{
@@ -911,6 +955,43 @@
       gap: 18px;
       z-index: 60;
       pointer-events: auto;
+    }
+
+
+    /* --- FIX: prevent detail-bottom from overlapping the album cover in the active card --- */
+    .detail-card{
+      display: grid;                 /* more deterministic than flex here */
+      grid-template-rows: 56% 1fr;   /* top = cover area, bottom = metadata area */
+    }
+    .detail-card .detail-top{
+      position: relative;
+      overflow: hidden;
+      z-index: 2;                    /* keep cover above any bottom stacking quirks */
+    }
+    .detail-card .detail-bottom{
+      position: relative;
+      z-index: 1;
+      margin-top: 0 !important;
+      transform: none !important;    /* guard against any accidental translateY hacks */
+    }
+    /* In detail cards, let album-art participate in layout inside the top row */
+    .detail-card .detail-top .album-art{
+      position: relative;            /* override global absolute album-art */
+      inset: auto;
+      width: 100%;
+      height: 100%;
+    }
+
+
+    /* --- Bottom fade-in: when a detail card becomes active/settled, fade bottom content in --- */
+    .detail-card .detail-bottom{
+      transition: opacity 220ms ease-out, transform 220ms ease-out;
+      will-change: opacity, transform;
+    }
+    .detail-card.bottom-enter .detail-bottom{
+      opacity: 0;
+      transform: translateY(12px);
+      pointer-events: none;
     }
 
 </style>
