@@ -1,0 +1,2407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>33⅓ – Label Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- iOS: run as a standalone "web app" when added to Home Screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="33anda3rd" />
+
+  <meta name="theme-color" content="#b40000" />
+
+  <!-- Favicons -->
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="favicon-32x32.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="favicon-16x16.png" sizes="16x16">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180" />
+  <link rel="manifest" href="manifest.webmanifest" />
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <link rel="stylesheet" href="https://use.typekit.net/zxp4dru.css">
+
+  <style>
+    :root {
+      --accent-red: #d40000;
+      --accent-yellow: #ffe400;
+      --text-main: #ffffff;
+      --shadow-strong: 0 18px 30px rgba(0, 0, 0, 0.45);
+      --shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.35);
+      --font-main: "coolvetica", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      --results-rgb: 180, 0, 0;
+
+      --ui-black: #0b0b0b;
+      --ui-white: #ffffff;
+      --ui-dim: rgba(0,0,0,0.55);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+
+    body {
+      font-family: var(--font-main);
+      color: #000;
+      background-color: #d9c4a8;
+      background-image: url("maple.png");
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .app {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      border-radius: 0;
+      box-shadow: none;
+      background: transparent;
+    }
+
+    /* Screen switching */
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 56px 24px 28px;
+      transition: opacity 220ms ease-out, transform 220ms ease-out;
+    }
+
+    .screen-default { opacity: 1; transform: translateX(0); }
+    .screen-processing, .screen-results, .screen-catalog, .screen-detail {
+      opacity: 0;
+      transform: translateX(100%);
+      pointer-events: none;
+    }
+
+    .app:not(.show-processing):not(.show-results):not(.show-catalog):not(.show-detail) .screen-default {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .app.show-processing .screen-default,
+    .app.show-results .screen-default,
+    .app.show-catalog .screen-default,
+    .app.show-detail .screen-default {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
+
+    .app.show-processing .screen-processing {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .app.show-results .screen-processing {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
+    .app.show-results .screen-results {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .app.show-catalog .screen-default,
+    .app.show-catalog .screen-processing,
+    .app.show-catalog .screen-results,
+    .app.show-catalog .screen-detail {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
+    .app.show-catalog .screen-catalog {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .app.show-detail .screen-default,
+    .app.show-detail .screen-processing,
+    .app.show-detail .screen-results,
+    .app.show-detail .screen-catalog {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
+    .app.show-detail .screen-detail {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    /* DEFAULT SCREEN */
+    .screen-default h1 {
+      margin: 0 0 40px;
+      font-size: 28px;
+      letter-spacing: 0.03em;
+      font-weight: 700;
+      text-align: center;
+    }
+    .record-wrapper {
+      position: relative;
+      width: 76%;
+      max-width: 320px;
+      margin-top: 20px;
+    }
+    .record {
+      position: relative;
+      width: 100%;
+      padding-bottom: 58%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at 30% 28%, #777 0%, #222 55%, #020202 100%);
+      transform: rotate(-18deg);
+      box-shadow: var(--shadow-soft);
+    }
+    .record::before {
+      content: "";
+      position: absolute;
+      inset: 12% 8%;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0));
+      opacity: 0.55;
+      mix-blend-mode: screen;
+    }
+    .record-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 34%;
+      height: 34%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    }
+    .record-label::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      margin-top: -3px;
+      margin-left: -3px;
+      border-radius: 50%;
+      background: #000;
+    }
+    .label-beam { display:none; } /* kept but unused */
+    .capture-hit-area {
+      position: absolute;
+      inset: 0;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .default-bottom-link {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 26px;
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      pointer-events: auto;
+    }
+    .default-link {
+      border: none;
+      background: transparent;
+      font-family: var(--font-main);
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #000;
+      cursor: pointer;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    }
+    .default-link:active { transform: translateY(1px); }
+
+    /* PROCESSING SCREEN */
+    .screen-processing h1 {
+      margin: 0 0 32px;
+      font-size: 24px;
+      text-align: center;
+    }
+    .processing-record-wrapper {
+      position: relative;
+      width: 76%;
+      max-width: 320px;
+      margin-top: 10px;
+    }
+    .tonearm {
+      position: absolute;
+      width: 58%;
+      right: -25%;
+      top: 3%;
+      transform: rotate(5deg);
+      pointer-events: none;
+      z-index: 10;
+    }
+    .processing-record-wrapper .record {
+      padding-bottom: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #777 0%, #222 55%, #020202 100%);
+      transform: none;
+    }
+    .record.spinning { transform: none; animation: spin 1.4s linear infinite; }
+    .screen-processing .record-label {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    .processing-label-text { margin-top: 32px; font-size: 14px; font-weight: 400; opacity: 0.8; }
+    .processing-status { margin-top: 8px; font-size: 23px; }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* RESULTS SCREEN */
+    .screen-results { padding: 0; }
+
+    .results-top {
+      position: relative;
+      flex: 0 0 56%;
+      width: 100%;
+      overflow: hidden;
+    }
+    .album-art { position: absolute; inset: 0; background: #e0e0e0; }
+    .album-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .album-label-circle {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: 46%;
+      padding-bottom: 46%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      box-shadow: var(--shadow-strong);
+    }
+    .album-label-circle::before {
+      content: "";
+      position: absolute;
+      inset: 10%;
+      border-radius: 50%;
+      border: 1px solid rgba(255,220,150,0.2);
+    }
+    .album-label-circle::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-left: -4px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: #111;
+    }
+
+    /* Save star on cover (results + detail) */
+    .save-star {
+      position: absolute;
+      right: 18px;
+      bottom: 16px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 10px 18px rgba(0,0,0,0.30);
+      cursor: pointer;
+      z-index: 20;
+    }
+    .save-star svg { width: 24px; height: 24px; }
+    .save-star.is-saved { background: rgba(255,255,255,0.82); }
+    .save-star.is-saved svg path { fill: #111; stroke: #111; }
+
+    .results-bottom {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      background:
+        linear-gradient(
+          to bottom,
+          rgba(var(--results-rgb), 0.95) 0%,
+          rgba(var(--results-rgb), 0.95) 48%,
+          rgba(var(--results-rgb), 0.40) 80%,
+          rgba(var(--results-rgb), 0.00) 100%
+        ),
+        url("maple.png") center/cover no-repeat;
+
+      padding: 24px 24px 26px;
+      color: #fff;
+    }
+
+    .album-meta { padding-right: 12%; }
+
+    .album-meta h2, .album-meta h3 { margin: 0; letter-spacing: 0.02em; }
+    .album-meta h2 {
+      font-size: 20px; line-height: 1.1; margin-bottom: 14px;
+      font-weight: 600; opacity: 0.98;
+    }
+    .album-meta h3 {
+      font-size: 36px; line-height: 0.98; font-weight: 500; letter-spacing: 0.01em;
+    }
+
+    .results-bottom-row {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .info-button {
+      flex: 0 0 auto;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: #ffffff;
+      color: var(--accent-red);
+      font-style: italic;
+      font-size: 22px;
+      line-height: 40px;
+      text-align: center;
+      box-shadow: var(--shadow-soft);
+      cursor: pointer;
+      font-family: Georgia;
+      font-weight: 800;
+    }
+
+    .catalog-button {
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: #ffffff;
+      box-shadow: var(--shadow-soft);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .catalog-icon {
+      width: 18px;
+      height: 14px;
+      position: relative;
+    }
+    .catalog-icon::before,
+    .catalog-icon::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--accent-red);
+      opacity: 0.95;
+    }
+    .catalog-icon::before { top: 0; }
+    .catalog-icon::after { bottom: 0; }
+    .catalog-icon span {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 3px;
+      border-radius: 999px;
+      background: var(--accent-red);
+      opacity: 0.95;
+    }
+
+    /* Make Discogs pill a touch smaller on the results footer row to fit the extra icon */
+    .results-bottom-row .discogs-button {
+      padding: 12px 18px 12px 16px;
+      font-size: 18px;
+      gap: 9px;
+    }
+    .results-bottom-row .discogs-button .play-icon {
+      border-top-width: 7px;
+      border-bottom-width: 7px;
+      border-left-width: 11px;
+    }
+
+    .retake-button { border: none; padding: 0; background: transparent; cursor: pointer; flex: 0 0 auto; }
+
+    .mini-record {
+      position: relative;
+      width: 68px;
+      padding-bottom: 68px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #777 0%, #222 55%, #020202 100%);
+      transform: none;
+      box-shadow: var(--shadow-soft);
+    }
+    .mini-record::before {
+      content: "";
+      position: absolute;
+      inset: 12% 10%;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(255,255,255,0.2), transparent);
+      opacity: 0.6;
+    }
+    .mini-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 34%;
+      height: 34%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: #fff;
+    }
+    .mini-label::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 5px;
+      height: 5px;
+      margin-left: -2.5px;
+      margin-top: -2.5px;
+      border-radius: 50%;
+      background: #000;
+    }
+
+    .discogs-button {
+      border: none;
+      border-radius: 999px;
+      padding: 14px 26px 14px 24px;
+      background: #ffffff;
+      color: var(--accent-red);
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.04em;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      box-shadow: var(--shadow-soft);
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+    .discogs-button .play-icon {
+      width: 0; height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 12px solid var(--accent-red);
+    }
+
+    .results-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 22px;
+      color: #222;
+      z-index: 40;
+    }
+    .results-overlay.open { display: flex; }
+
+    .overlay-card {
+      width: 100%;
+      max-width: 360px;
+      background: #ffffff;
+      border-radius: 22px;
+      padding: 18px 18px 16px;
+      box-shadow: 0 18px 35px rgba(0,0,0,0.5);
+      font-size: 14px;
+    }
+    .overlay-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .overlay-card-header h4 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .overlay-close { border: none; background: transparent; font-size: 22px; cursor: pointer; }
+    .overlay-body {
+      font-size: 13px;
+      line-height: 1.35;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .overlay-body .meta-line { margin-top: 4px; }
+
+    .overlay-label { margin-top: 10px; font-weight: 600; margin-bottom: 2px; }
+    .overlay-ocr {
+      white-space: pre-wrap;
+      font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      background: #f5f5f5;
+      border-radius: 10px;
+      padding: 8px;
+      margin-top: 4px;
+    }
+    .overlay-discogs { margin-top: 10px; display: flex; justify-content: flex-end; }
+    .overlay-discogs button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-size: 14px;
+      background: var(--accent-red);
+      color: #fff;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .overlay-discogs .play-icon {
+      width: 0; height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 9px solid #fff;
+    }
+
+    .meta-line { font-size: 12px; color: #555; }
+
+    /* CATALOG */
+    .screen-catalog {
+      padding: 24px 18px 96px;
+      align-items: stretch;
+    }
+
+    .catalog-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 4px 6px 16px;
+    }
+    .catalog-count {
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+    }
+
+    .catalog-sort {
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+      user-select: none;
+    }
+    .catalog-sort .u {
+      text-decoration: underline;
+      text-underline-offset: 6px;
+      cursor: pointer;
+    }
+
+    .catalog-list {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 6px 0 18px;
+    }
+
+    .catalog-item {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 14px;
+      padding: 12px 10px;
+      border-radius: 16px;
+      cursor: pointer;
+    }
+    .catalog-item:active { transform: translateY(1px); }
+    .catalog-thumb {
+      width: 64px;
+      height: 64px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.6);
+      overflow: hidden;
+      box-shadow: 0 10px 16px rgba(0,0,0,0.18);
+    }
+    .catalog-thumb img { width: 100%; height: 100%; object-fit: cover; display:block; }
+
+    .catalog-text .artist {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.1;
+      margin: 0;
+      color: #000;
+    }
+    .catalog-text .title {
+      font-size: 34px;
+      font-weight: 500;
+      line-height: 0.95;
+      margin: 2px 0 0;
+      color: #000;
+    }
+
+    .catalog-bottom-bar {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+	  border-top:solid 1px #dadada70;
+    }
+
+
+	.catalog-bottom-bar{
+	  background:
+	  linear-gradient(to top, rgba(82, 53, 53, 0.53), rgba(255, 255, 255, 0.35)),
+	  url("maple.png") center/cover no-repeat
+	  backdrop-filter: blur(2px);
+	  -webkit-backdrop-filter: blur(2px);
+	}
+
+
+
+    .catalog-bottom-actions {
+      display: flex;
+      align-items: center;
+      gap: 44px;
+      font-size: 34px;
+      font-weight: 700;
+      color: #000;
+    }
+    .catalog-action {
+      border: none;
+      background: transparent;
+      font-family: var(--font-main);
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+      cursor: pointer;
+    }
+
+    /* DETAIL */
+    .screen-detail { padding: 0; }
+    .detail-top { position: relative; flex: 0 0 56%; width: 100%; overflow: hidden; }
+    .detail-bottom {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      background:
+        linear-gradient(
+          to bottom,
+          rgba(var(--results-rgb), 0.95) 0%,
+          rgba(var(--results-rgb), 0.95) 48%,
+          rgba(var(--results-rgb), 0.40) 80%,
+          rgba(var(--results-rgb), 0.00) 100%
+        ),
+        url("maple.png") center/cover no-repeat;
+      padding: 24px 24px 26px;
+      color: #fff;
+    }
+    .back-link {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      border: none;
+      background: transparent;
+      font-family: var(--font-main);
+      font-size: 22px;
+      font-weight: 700;
+      color: #000;
+      cursor: pointer;
+      z-index: 30;
+    }
+
+    .label-toggle-button {
+      flex: 0 0 auto;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.92);
+      box-shadow: 0 12px 20px rgba(0,0,0,0.22);
+      cursor: pointer;
+      font-family: var(--font-main);
+      font-weight: 700;
+      color: #000;
+      display: grid;
+      place-items: center;
+      line-height: 0.7;
+      font-size: 12px;
+      text-align: center;
+    }
+    .label-toggle-button span { display:block; }
+    .detail-label-circle {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: 46%;
+      padding-bottom: 46%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      box-shadow: var(--shadow-strong);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease-out;
+      z-index: 22;
+    }
+    .detail-label-circle.show { opacity: 1; }
+
+    .detail-bottom-row {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    /* Toast */
+    .toast {
+      position: absolute;
+      left: 50%;
+      bottom: 104px;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.78);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease-out, transform 180ms ease-out;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
+
+    @media (max-height: 720px) {
+      .screen { padding-top: 42px; }
+      .screen-default h1 { margin-bottom: 26px; font-size: 24px; }
+      .album-meta h3 { font-size: 48px; line-height: 0.98; }
+      .album-meta h2 { font-size: 18px; margin-bottom: 12px; }
+
+      .catalog-text .title { font-size: 48px; }
+      .catalog-text .artist { font-size: 24px; }
+      .catalog-count, .catalog-sort { font-size: 30px; }
+      .catalog-action { font-size: 30px; }
+    }
+
+    #labelCanvas, #thumbCanvas { display: none; }
+  
+    /* --- Catalog detail carousel (card swipe) --- */
+    .screen.screen-detail{
+      align-items: stretch;
+      justify-content: flex-start;
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .screen.screen-detail .back-link{
+      left: 18px;
+    }
+    .detail-carousel{
+      flex: 1;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 6.5vw 120px;
+      margin-top: 44px; /* leaves space for Back to catalog */
+    }
+    .detail-carousel::-webkit-scrollbar{ display:none; }
+    .detail-card{
+      flex: 0 0 85vw;
+      height: calc(100vh - 200px);
+      display: flex;
+      flex-direction: column;
+      max-height: 900px;
+      scroll-snap-align: center;
+      border-radius: 34px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.24);
+      background: rgba(255,255,255,0.10);
+      backdrop-filter: blur(10px);
+      --tilt: 0deg;
+      --cardScale: 1;
+      transform: rotate(var(--tilt)) scale(var(--cardScale));
+      transform-origin: 50% 60%;
+      will-change: transform;
+    }
+    .detail-card.ghost{
+      pointer-events: none;
+      opacity: 0.70;
+      --cardScale: 0.985;
+    }
+    /* Make the existing detail layout fill the card */
+    .detail-card .detail-top{ flex: 0 0 56%; }
+    .detail-card .detail-bottom{ flex: 1; }
+
+    /* Ensure cover + text scale correctly inside the card */
+    .detail-card .detail-top img,
+    #detailCover{
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    /* Keep the text from hiding under the bottom button row */
+    .detail-card .detail-bottom{
+      padding-bottom: 120px; /* room for record/show/discogs row */
+    }
+
+    .detail-card .detail-bottom-row.detail-label-only{
+      justify-content: left;
+      gap: 0;
+    }
+
+    
+
+    .detail-fixed-actions{
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 18px;
+      width: 85vw;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      z-index: 60;
+      pointer-events: auto;
+    }
+
+
+    /* Detail: hide the CENTER card content while a new record settles into position,
+       then fade everything in together (prevents partial/overlapping UI flashes). */
+    .detail-card.active .detail-top,
+    .detail-card.active .detail-bottom{
+      transition: opacity 220ms ease-out, transform 220ms ease-out;
+      will-change: opacity, transform;
+    }
+    .detail-card.active.is-swapping .detail-top,
+    .detail-card.active.is-swapping .detail-bottom{
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+    }
+
+</style>
+</head>
+<body>
+  <div class="app" id="app">
+    <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" />
+    <input type="file" id="importZipInput" accept=".zip,application/zip" style="display:none" />
+
+    <!-- DEFAULT -->
+    <section class="screen screen-default" aria-label="Shoot the label">
+      <h1>just the label</h1>
+      <div class="record-wrapper">
+        <div class="record">
+          <div class="record-label"></div>
+        </div>
+        <div class="label-beam left"></div>
+        <div class="label-beam right"></div>
+      </div>
+      <button class="capture-hit-area" type="button" aria-label="Shoot the label"></button>
+
+      <div class="default-bottom-link">
+        <button class="default-link" id="openCatalogBtn" type="button">my catalog</button>
+      </div>
+    </section>
+
+    <!-- PROCESSING -->
+    <section class="screen screen-processing" aria-label="Processing label">
+      <h1>Finding your record</h1>
+      <div class="processing-record-wrapper">
+        <div class="record spinning">
+          <div class="record-label"></div>
+        </div>
+        <img class="tonearm" src="tonearm.png" alt="" />
+      </div>
+      <div class="processing-label-text">Listening…</div>
+      <div class="processing-status" id="processingStatus">Loading image…</div>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="screen screen-results" aria-label="Scan results">
+      <div class="results-top">
+        <div class="album-art">
+          <img id="discogsCover" alt="Album cover" />
+        </div>
+
+        <button class="save-star" id="saveStarBtn" type="button" aria-label="Save to catalog">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.9 6.1 20.7l1.2-6.6L2.5 9.5l6.6-.9L12 2.6z"
+                  fill="none" stroke="#111" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <div class="album-label-circle"></div>
+      </div>
+
+      <div class="results-bottom">
+        <div class="album-meta">
+          <h2 id="albumArtist">Artist</h2>
+          <h3 id="albumTitle">Title</h3>
+        </div>
+
+        <div class="results-bottom-row">
+          <button class="retake-button" type="button" id="retakeButton" aria-label="Shoot another label">
+            <div class="mini-record">
+              <div class="mini-label"></div>
+            </div>
+          </button>
+
+          <button class="info-button" type="button" id="infoButton" aria-label="Show technical results">i</button>
+
+          <button class="catalog-button" type="button" id="catalogButton" aria-label="Open my catalog">
+            <span class="catalog-icon" aria-hidden="true"><span></span></span>
+          </button>
+
+          <button class="discogs-button" type="button" id="discogsButton" aria-label="Open release on Discogs">
+            <span class="play-icon" aria-hidden="true"></span>
+            <span>Discogs</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="results-overlay" id="resultsOverlay" aria-hidden="true">
+        <div class="overlay-card">
+          <div class="overlay-card-header">
+            <h4>Scan details</h4>
+            <button class="overlay-close" type="button" id="overlayClose" aria-label="Close details">&times;</button>
+          </div>
+          <div class="overlay-body">
+            <div class="meta-line" id="statusText">Waiting for a photo…</div>
+            <div class="meta-line" id="matchStatus"></div>
+            <div class="meta-line" id="googleQueryLine"></div>
+            <div class="meta-line" id="cleanQueryLine"></div>
+
+            <div class="overlay-label">OCR text</div>
+            <div class="overlay-ocr" id="ocrOutput"></div>
+          </div>
+          <div class="overlay-discogs">
+            <button type="button" id="overlayDiscogsButton">
+              <span class="play-icon" aria-hidden="true"></span>
+              <span>Open on Discogs</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CATALOG -->
+    <section class="screen screen-catalog" aria-label="My catalog">
+      <div class="catalog-header">
+        <div class="catalog-count" id="catalogCount">0 Records</div>
+        <div class="catalog-sort" id="catalogSort">
+          Sort by <span class="u" id="sortToggle">Title</span>
+        </div>
+      </div>
+
+      <div class="catalog-list" id="catalogList" role="list"></div>
+
+      <div class="catalog-bottom-bar">
+        <button class="retake-button" type="button" id="catalogNewScanBtn" aria-label="New scan">
+          <div class="mini-record">
+            <div class="mini-label"></div>
+          </div>
+        </button>
+
+        <div class="catalog-bottom-actions">
+          <button class="catalog-action" type="button" id="exportBtn">Export</button>
+          <button class="catalog-action" type="button" id="importBtn">Import</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL -->
+    <section class="screen screen-detail" aria-label="Record detail">
+      <button class="back-link" id="backToCatalogBtn" type="button">Back to catalog</button>
+
+      
+      <div class="detail-carousel" id="detailCarousel" aria-label="Swipe between catalog records">
+        <div class="detail-card ghost" aria-hidden="true">
+          <div class="detail-top">
+            <div class="album-art">
+              <img id="prevCover" alt="Previous album cover" />
+            </div>
+            <div class="detail-bottom" style="background: rgba(0,0,0,0.20), url('maple.png') center/cover no-repeat;">
+              <div class="detail-text">
+                <div class="detail-artist" id="prevArtist"> </div>
+                <div class="detail-title" id="prevTitle"> </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-card active">
+          <div class="detail-top" id="detailTop">
+        <div class="album-art">
+          <img id="detailCover" alt="Album cover" />
+        </div>
+
+        <button class="save-star" id="detailStarBtn" type="button" aria-label="Save to catalog">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.9 6.1 20.7l1.2-6.6L2.5 9.5l6.6-.9L12 2.6z"
+                  fill="none" stroke="#111" stroke-width="1.8" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <div class="detail-label-circle" id="detailLabelCircle"></div>
+      </div>
+
+      <div class="detail-bottom">
+        <div class="album-meta">
+          <h2 id="detailArtist">Artist</h2>
+          <h3 id="detailTitle">Title</h3>
+        </div>
+
+        <div class="detail-bottom-row detail-label-only">
+          <button class="label-toggle-button" id="toggleLabelBtn" type="button" aria-label="Show label">
+            <span id="toggleLabelText">Show</span>
+            <span>Label</span>
+          </button>
+        </div>
+
+          </div>
+        </div>
+
+        <div class="detail-card ghost" aria-hidden="true">
+          <div class="detail-top">
+            <div class="album-art">
+              <img id="nextCover" alt="Next album cover" />
+            </div>
+            <div class="detail-bottom" style="background: rgba(0,0,0,0.20), url('maple.png') center/cover no-repeat;">
+              <div class="detail-text">
+                <div class="detail-artist" id="nextArtist"> </div>
+                <div class="detail-title" id="nextTitle"> </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-fixed-actions" id="detailFixedActions" aria-label="Detail actions">
+        <button class="retake-button" type="button" id="detailNewScanBtn" aria-label="New scan">
+          <div class="mini-record">
+            <div class="mini-label"></div>
+          </div>
+        </button>
+
+        <button class="discogs-button" type="button" id="detailDiscogsBtn" aria-label="Open release on Discogs">
+          <span class="play-icon" aria-hidden="true"></span>
+          <span>Discogs</span>
+        </button>
+      </div>
+    </section>
+
+
+    <div class="toast" id="toast" aria-live="polite"></div>
+
+    <canvas id="labelCanvas"></canvas>
+    <canvas id="thumbCanvas"></canvas>
+  </div>
+
+  <script>
+    // -----------------------------
+    // State + DOM
+    // -----------------------------
+    const app = document.getElementById("app");
+
+    const fileInput = document.getElementById("fileInput");
+    const importZipInput = document.getElementById("importZipInput");
+
+    const captureHitArea = document.querySelector(".capture-hit-area");
+    const retakeButton = document.getElementById("retakeButton");
+
+    const openCatalogBtn = document.getElementById("openCatalogBtn");
+
+    const canvas = document.getElementById("labelCanvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    const thumbCanvas = document.getElementById("thumbCanvas");
+    const tctx = thumbCanvas.getContext("2d", { willReadFrequently: true });
+
+    const statusText = document.getElementById("statusText");
+    const matchStatus = document.getElementById("matchStatus");
+    const ocrOutput = document.getElementById("ocrOutput");
+    const cleanQueryLine = document.getElementById("cleanQueryLine");
+    const googleQueryLine = document.getElementById("googleQueryLine");
+    const processingStatus = document.getElementById("processingStatus");
+
+    const discogsCover = document.getElementById("discogsCover");
+    const albumArtist = document.getElementById("albumArtist");
+    const albumTitle = document.getElementById("albumTitle");
+    const discogsButton = document.getElementById("discogsButton");
+    const overlayDiscogsButton = document.getElementById("overlayDiscogsButton");
+
+    // Results footer catalog button
+    const catalogButton = document.getElementById("catalogButton");
+
+    const infoButton = document.getElementById("infoButton");
+    const overlay = document.getElementById("resultsOverlay");
+    const overlayClose = document.getElementById("overlayClose");
+
+    const processingRecordLabel = document.querySelector(".screen-processing .record-label");
+    const albumLabelCircle = document.querySelector(".album-label-circle");
+
+    // Results save
+    const saveStarBtn = document.getElementById("saveStarBtn");
+
+    // Catalog
+    const catalogCount = document.getElementById("catalogCount");
+    const catalogList = document.getElementById("catalogList");
+    const sortToggle = document.getElementById("sortToggle");
+    const exportBtn = document.getElementById("exportBtn");
+    const importBtn = document.getElementById("importBtn");
+    const catalogNewScanBtn = document.getElementById("catalogNewScanBtn");
+
+    // Detail
+    const backToCatalogBtn = document.getElementById("backToCatalogBtn");
+    const detailCover = document.getElementById("detailCover");
+    const detailArtist = document.getElementById("detailArtist");
+    const detailTitle = document.getElementById("detailTitle");
+    const detailDiscogsBtn = document.getElementById("detailDiscogsBtn");
+    const detailLabelCircle = document.getElementById("detailLabelCircle");
+    const toggleLabelBtn = document.getElementById("toggleLabelBtn");
+    const toggleLabelText = document.getElementById("toggleLabelText");
+    const detailStarBtn = document.getElementById("detailStarBtn");
+    const detailNewScanBtn = document.getElementById("detailNewScanBtn");
+    const detailTop = document.getElementById("detailTop");
+
+    
+    const detailCarousel = document.getElementById("detailCarousel");
+    const prevCover = document.getElementById("prevCover");
+    const prevArtist = document.getElementById("prevArtist");
+    const prevTitle = document.getElementById("prevTitle");
+    const nextCover = document.getElementById("nextCover");
+    const nextArtist = document.getElementById("nextArtist");
+    const nextTitle = document.getElementById("nextTitle");
+// Toast
+    const toast = document.getElementById("toast");
+
+    let currentDiscogsUrl = "";
+    let currentGoogleQuery = "";
+    let currentLabelDataUrl = "";
+    let currentLabelThumbDataUrl = "";
+    let coverSamplerImg = null;
+    let labelSamplerImg = null;
+    let currentAccentRgb = [180, 0, 0];
+
+    // Catalog state
+    const LS_KEY = "33anda3rd_catalog_v1";
+    const LS_SORT = "33anda3rd_catalog_sort";
+    let catalog = loadCatalog();
+    let sortKey = loadSortKey(); // 'title' | 'artist'
+
+    // Detail navigation
+    let detailIndex = 0;
+    let detailShowLabel = false;
+
+    // -----------------------------
+    // Screen helpers
+    // -----------------------------
+    function showDefault() {
+      app.classList.remove("show-processing", "show-results", "show-catalog", "show-detail");
+    }
+    function showProcessing() {
+      app.classList.add("show-processing");
+      app.classList.remove("show-results", "show-catalog", "show-detail");
+    }
+    function showResults() {
+      app.classList.add("show-results");
+      app.classList.remove("show-processing", "show-catalog", "show-detail");
+    }
+    function showCatalog() {
+      app.classList.add("show-catalog");
+      app.classList.remove("show-processing", "show-results", "show-detail");
+      renderCatalog();
+    }
+    function showDetail() {
+      app.classList.add("show-detail");
+      app.classList.remove("show-processing", "show-results", "show-catalog");
+    }
+
+    // -----------------------------
+    // LocalStorage catalog
+    // -----------------------------
+    function loadCatalog() {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    function saveCatalog() {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(catalog));
+        return true;
+      } catch (e) {
+        console.warn("Could not save catalog", e);
+        return false;
+      }
+    }
+    function loadSortKey() {
+      const k = (localStorage.getItem(LS_SORT) || "title").toLowerCase();
+      return (k === "artist") ? "artist" : "title";
+    }
+    function saveSortKey(k) {
+      sortKey = k;
+      localStorage.setItem(LS_SORT, sortKey);
+    }
+
+    function normalizeKey(s) {
+      return String(s || "").trim().toLowerCase();
+    }
+
+    function stableIdForRecord(r) {
+      // Prefer Discogs URL; fallback to artist+title
+      if (r && r.discogsUrl) return r.discogsUrl;
+      return normalizeKey((r.artist || "") + " — " + (r.title || ""));
+    }
+
+    function isSavedCurrent() {
+      if (!currentDiscogsUrl && (!albumArtist.textContent || !albumTitle.textContent)) return false;
+      const id = currentDiscogsUrl || stableIdForRecord({ artist: albumArtist.textContent, title: albumTitle.textContent });
+      return catalog.some(x => stableIdForRecord(x) === id);
+    }
+
+    function setStarVisual(btn, saved) {
+      if (!btn) return;
+      btn.classList.toggle("is-saved", !!saved);
+      const path = btn.querySelector("path");
+      if (!path) return;
+      if (saved) {
+        path.setAttribute("fill", "#111");
+        path.setAttribute("stroke", "#111");
+      } else {
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", "#111");
+      }
+    }
+
+    function toastMsg(msg) {
+      toast.textContent = msg;
+      toast.classList.add("show");
+      clearTimeout(toast.__t);
+      toast.__t = setTimeout(() => toast.classList.remove("show"), 1400);
+    }
+
+    // -----------------------------
+    // Default / navigation
+    // -----------------------------
+    captureHitArea.addEventListener("click", () => fileInput.click());
+
+    openCatalogBtn.addEventListener("click", () => {
+      catalog = loadCatalog();
+      sortKey = loadSortKey();
+      showCatalog();
+    });
+
+    if (catalogButton) {
+      catalogButton.addEventListener("click", () => {
+        catalog = loadCatalog();
+        sortKey = loadSortKey();
+        showCatalog();
+      });
+    }
+
+    catalogButton.addEventListener("click", () => {
+      catalog = loadCatalog();
+      sortKey = loadSortKey();
+      showCatalog();
+    });
+
+    // Retake/new scan buttons (from results/catalog/detail)
+    function startNewScan() {
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+
+      showDefault();
+
+      if (processingRecordLabel) {
+        processingRecordLabel.style.backgroundImage = "";
+        processingRecordLabel.style.backgroundColor = "#fff";
+      }
+      if (albumLabelCircle) albumLabelCircle.style.backgroundImage = "";
+
+      currentLabelDataUrl = "";
+      currentLabelThumbDataUrl = "";
+      coverSamplerImg = null;
+      labelSamplerImg = null;
+      setResultsAccentRgb([180, 0, 0]);
+
+      // Reset results UI
+      discogsCover.removeAttribute("src");
+      albumArtist.textContent = "Artist";
+      albumTitle.textContent = "Title";
+      currentDiscogsUrl = "";
+      currentGoogleQuery = "";
+      setStarVisual(saveStarBtn, false);
+
+      // go to camera
+      fileInput.value = "";
+      fileInput.click();
+    }
+
+    retakeButton.addEventListener("click", startNewScan);
+    catalogNewScanBtn.addEventListener("click", startNewScan);
+    detailNewScanBtn.addEventListener("click", startNewScan);
+
+    // -----------------------------
+    // File input change
+    // -----------------------------
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+
+      showProcessing();
+
+      matchStatus.textContent = "";
+      ocrOutput.textContent = "";
+      cleanQueryLine.textContent = "";
+      googleQueryLine.textContent = "";
+      processingStatus.textContent = "Loading image…";
+      statusText.textContent = "Loading image…";
+      currentDiscogsUrl = "";
+      currentGoogleQuery = "";
+      discogsCover.removeAttribute("src");
+
+      currentLabelDataUrl = "";
+      currentLabelThumbDataUrl = "";
+      coverSamplerImg = null;
+      labelSamplerImg = null;
+      setResultsAccentRgb([180, 0, 0]);
+      setStarVisual(saveStarBtn, false);
+
+      if (processingRecordLabel) {
+        processingRecordLabel.style.backgroundImage = "";
+        processingRecordLabel.style.backgroundColor = "#fff";
+      }
+      if (albumLabelCircle) albumLabelCircle.style.backgroundImage = "";
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => processImage(img);
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // -----------------------------
+    // Image processing + thumb
+    // -----------------------------
+    function processImage(img) {
+      const size = Math.min(img.width, img.height);
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
+
+      canvas.width = size;
+      canvas.height = size;
+
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+
+      // Store full cropped label for UI
+      try {
+        const labelDataUrl = canvas.toDataURL("image/png");
+        currentLabelDataUrl = labelDataUrl;
+        setLabelSampler(currentLabelDataUrl);
+
+        if (processingRecordLabel) {
+          processingRecordLabel.style.backgroundImage = `url(${labelDataUrl})`;
+          processingRecordLabel.style.backgroundColor = "transparent";
+        }
+        if (albumLabelCircle) albumLabelCircle.style.backgroundImage = `url(${labelDataUrl})`;
+
+        // Create smaller JPEG thumb for catalog export (lower-res)
+        currentLabelThumbDataUrl = makeLabelThumbDataUrl();
+
+        updateResultsGradient();
+      } catch (e) {
+        console.error("Error creating label data URL", e);
+      }
+
+      // Greyscale for OCR (kept from prior version)
+      const imageData = ctx.getImageData(0, 0, size, size);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        data[i] = data[i + 1] = data[i + 2] = gray;
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      processingStatus.textContent = "Running OCR…";
+      statusText.textContent = "Running OCR…";
+      runOCR();
+    }
+
+    function makeLabelThumbDataUrl() {
+      // Downscale the *already-cropped* label canvas to a small JPEG for storage/export.
+      // This avoids async image decode and keeps localStorage size reasonable.
+      const THUMB = 200; // px
+      thumbCanvas.width = THUMB;
+      thumbCanvas.height = THUMB;
+
+      try {
+        tctx.clearRect(0, 0, THUMB, THUMB);
+        tctx.imageSmoothingEnabled = true;
+        tctx.imageSmoothingQuality = "high";
+        // `canvas` is the cropped square label
+        tctx.drawImage(canvas, 0, 0, THUMB, THUMB);
+        return thumbCanvas.toDataURL("image/jpeg", 0.62);
+      } catch (e) {
+        // Fallback: store the PNG (larger) if needed
+        return currentLabelDataUrl || "";
+      }
+    }
+// -----------------------------
+    // OCR + lookup (unchanged logic, with save-star refresh)
+    // -----------------------------
+    function buildCleanQuery(rawText) {
+      const lines = rawText.split(/\r?\n/);
+      const tokens = [];
+      for (let line of lines) {
+        line = line
+          .replace(/[^A-Za-z0-9'&()\- ]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (!line) continue;
+        const words = line.split(" ");
+        const goodWords = words.filter((w) => {
+          if (!w) return false;
+          if (/^\d+$/.test(w)) return true;
+          return w.length > 2;
+        });
+        if (goodWords.length) tokens.push(...goodWords);
+      }
+      const seen = new Set();
+      const final = [];
+      for (let w of tokens) {
+        const key = w.toUpperCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          final.push(w);
+        }
+      }
+      return final.join(" ");
+    }
+
+    async function runOCR() {
+      try {
+        const { data } = await Tesseract.recognize(canvas, "eng", {
+          logger: (m) => {
+            if (m.status === "recognizing text" && m.progress != null) {
+              const pct = Math.round(m.progress * 100);
+              const msg = `Running OCR… ${pct}%`;
+              processingStatus.textContent = msg;
+              statusText.textContent = msg;
+            }
+          },
+        });
+
+        const text = data.text || "";
+        ocrOutput.textContent = text.trim();
+        processingStatus.textContent = "OCR complete. Trying to identify record…";
+        statusText.textContent = "OCR complete. Trying to identify record…";
+
+        const cleanQuery = buildCleanQuery(text);
+        cleanQueryLine.textContent = cleanQuery
+          ? "Cleaned query: " + cleanQuery
+          : "Cleaned query: (nothing usable found)";
+
+        if (cleanQuery) {
+          const gq = `site:discogs.com ${cleanQuery}`;
+          currentGoogleQuery = gq;
+          googleQueryLine.textContent = "Google query: " + gq;
+        } else {
+          googleQueryLine.textContent = "Google query: (none – not enough text)";
+        }
+
+        if (!cleanQuery) {
+          const msg = "Not enough text to search. Try a clearer photo of the label.";
+          matchStatus.textContent = msg;
+          processingStatus.textContent = msg;
+          statusText.textContent = msg;
+          showResults();
+          return;
+        }
+
+        const res = await fetch(
+          "/.netlify/functions/discogsSearch?query=" + encodeURIComponent(cleanQuery)
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error("discogsSearch error:", errText);
+          matchStatus.textContent = "Lookup error: " + res.status;
+          processingStatus.textContent = "Lookup error: " + res.status;
+          statusText.textContent = "Lookup error: " + res.status;
+
+          showResults();
+          return;
+        }
+
+        const result = await res.json();
+
+        if (result.primaryGoogleQuery) {
+          currentGoogleQuery = result.primaryGoogleQuery;
+          googleQueryLine.textContent = "Google query: " + result.primaryGoogleQuery;
+        }
+
+        matchStatus.textContent = "Match found (via Google + Discogs).";
+
+        const fullTitle = result.title || "";
+        let artist = "";
+        let title = "";
+
+        if (fullTitle.includes(" – ")) {
+          [artist, title] = fullTitle.split(" – ", 2);
+        } else if (fullTitle.includes(" - ")) {
+          [artist, title] = fullTitle.split(" - ", 2);
+        } else {
+          title = fullTitle;
+        }
+
+        albumArtist.textContent = artist || "Discogs match";
+        albumTitle.textContent = title || "(title unknown)";
+
+        currentDiscogsUrl = result.discogsUrl || "";
+
+        if (result.coverImage) {
+          discogsCover.removeAttribute("crossorigin");
+          discogsCover.src = result.coverImage;
+
+          trySampleCoverColor(result.coverImage);
+          updateResultsGradient();
+        } else {
+          discogsCover.removeAttribute("src");
+          coverSamplerImg = null;
+      labelSamplerImg = null;
+          updateResultsGradient();
+        }
+
+        processingStatus.textContent = "Done.";
+        statusText.textContent = "Done.";
+
+        // Refresh star state based on catalog
+        catalog = loadCatalog();
+        setStarVisual(saveStarBtn, isSavedCurrent());
+
+        showResults();
+      } catch (err) {
+        console.error(err);
+        const msg = "Error during OCR or lookup.";
+        processingStatus.textContent = msg;
+        statusText.textContent = msg;
+        matchStatus.textContent = msg;
+        showResults();
+      }
+    }
+
+    // -----------------------------
+    // Results overlay
+    // -----------------------------
+    infoButton.addEventListener("click", () => {
+      overlay.classList.add("open");
+      overlay.setAttribute("aria-hidden", "false");
+    });
+    overlayClose.addEventListener("click", () => {
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+    });
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        overlay.classList.remove("open");
+        overlay.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    // -----------------------------
+    // Discogs open
+    // -----------------------------
+    function openDiscogs(url) {
+      const u = url || currentDiscogsUrl;
+      if (!u) return;
+      window.open(u, "_blank", "noopener");
+    }
+    discogsButton.addEventListener("click", () => openDiscogs(currentDiscogsUrl));
+    overlayDiscogsButton.addEventListener("click", () => openDiscogs(currentDiscogsUrl));
+    detailDiscogsBtn.addEventListener("click", () => {
+      const rec = getSortedCatalog()[detailIndex];
+      openDiscogs(rec && rec.discogsUrl);
+    });
+
+    // -----------------------------
+    // Save to catalog (Results)
+    // -----------------------------
+    saveStarBtn.addEventListener("click", () => {
+      const rec = buildCurrentRecordForSave();
+      if (!rec) return;
+
+      const id = stableIdForRecord(rec);
+      const idx = catalog.findIndex(x => stableIdForRecord(x) === id);
+
+      if (idx >= 0) {
+        const removed = catalog.splice(idx, 1)[0];
+        const ok = saveCatalog();
+        if (!ok) {
+          // revert
+          catalog.splice(idx, 0, removed);
+          toastMsg("Couldn’t remove (storage blocked)");
+          return;
+        }
+        setStarVisual(saveStarBtn, false);
+        toastMsg("Removed from catalog");
+      } else {
+        catalog.unshift(rec);
+        const ok = saveCatalog();
+        if (!ok) {
+          // revert
+          catalog.shift();
+          setStarVisual(saveStarBtn, false);
+          toastMsg("Couldn’t save (storage full/blocked)");
+          return;
+        }
+        setStarVisual(saveStarBtn, true);
+        toastMsg("Saved to catalog");
+      }
+    });
+
+    function buildCurrentRecordForSave() {
+      const artist = (albumArtist.textContent || "").trim();
+      const title = (albumTitle.textContent || "").trim();
+      const coverImage = (discogsCover && discogsCover.getAttribute("src")) ? discogsCover.getAttribute("src") : "";
+      const discogsUrl = currentDiscogsUrl || "";
+      if (!artist && !title && !discogsUrl) return null;
+
+      return {
+        artist,
+        title,
+        discogsUrl,
+        coverImage,
+        labelThumb: currentLabelThumbDataUrl || currentLabelDataUrl || "",
+        accentRgb: (Array.isArray(currentAccentRgb) ? currentAccentRgb.slice(0,3) : [180,0,0]),
+        createdAt: Date.now()
+      };
+    }
+
+    // -----------------------------
+    // Catalog list + sort toggle
+    // -----------------------------
+    sortToggle.addEventListener("click", () => {
+      const next = (sortKey === "title") ? "artist" : "title";
+      saveSortKey(next);
+      sortToggle.textContent = (sortKey === "title") ? "Title" : "Artist";
+      renderCatalog();
+    });
+
+    function getSortedCatalog() {
+      const arr = [...loadCatalog()];
+      const k = sortKey;
+
+      arr.sort((a, b) => {
+        const av = normalizeKey(a && a[k]);
+        const bv = normalizeKey(b && b[k]);
+        if (av < bv) return -1;
+        if (av > bv) return 1;
+        // tie-breaker
+        const at = normalizeKey(a && a.title);
+        const bt = normalizeKey(b && b.title);
+        if (at < bt) return -1;
+        if (at > bt) return 1;
+        return 0;
+      });
+
+      return arr;
+    }
+
+    function renderCatalog() {
+      catalog = loadCatalog();
+      sortToggle.textContent = (sortKey === "title") ? "Title" : "Artist";
+
+      const sorted = getSortedCatalog();
+      const n = sorted.length;
+      catalogCount.textContent = `${n} Record${n === 1 ? "" : "s"}`;
+
+      catalogList.innerHTML = "";
+      if (!n) {
+        const empty = document.createElement("div");
+        empty.style.padding = "18px 10px";
+        empty.style.fontSize = "22px";
+        empty.style.fontWeight = "600";
+        empty.textContent = "No saved records yet. Save one from the results screen with the star.";
+        catalogList.appendChild(empty);
+        return;
+      }
+
+      sorted.forEach((rec, idx) => {
+        const row = document.createElement("div");
+        row.className = "catalog-item";
+        row.setAttribute("role", "listitem");
+
+        const thumb = document.createElement("div");
+        thumb.className = "catalog-thumb";
+        const img = document.createElement("img");
+        img.alt = "Cover";
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.src = rec.coverImage || "";
+        thumb.appendChild(img);
+
+        const text = document.createElement("div");
+        text.className = "catalog-text";
+        const a = document.createElement("p");
+        a.className = "artist";
+        a.textContent = rec.artist || "Unknown artist";
+        const t = document.createElement("p");
+        t.className = "title";
+        t.textContent = rec.title || "(untitled)";
+        text.appendChild(a);
+        text.appendChild(t);
+
+        row.appendChild(thumb);
+        row.appendChild(text);
+
+        row.addEventListener("click", () => {
+          detailIndex = idx;
+          detailShowLabel = false;
+          renderDetailCarousel({ animate: true });
+          showDetail();
+        });
+
+        catalogList.appendChild(row);
+      });
+    }
+
+    // Back from detail -> catalog
+    backToCatalogBtn.addEventListener("click", () => {
+      showCatalog();
+    });
+
+    // -----------------------------
+    // Detail view (swipe, show label)
+    // -----------------------------
+    function renderDetailFromIndex() {
+      const sorted = getSortedCatalog();
+      if (!sorted.length) {
+        showCatalog();
+        return;
+      }
+      detailIndex = Math.max(0, Math.min(detailIndex, sorted.length - 1));
+      const rec = sorted[detailIndex];
+
+      currentLabelDataUrl = rec.labelThumb || "";
+      currentLabelThumbDataUrl = rec.labelThumb || "";
+
+      detailCover.src = rec.coverImage || "";
+      detailArtist.textContent = rec.artist || "Unknown artist";
+      detailTitle.textContent = rec.title || "(untitled)";
+
+      // Set gradient for detail:
+      // 1) Prefer stored color from the original scan (works even if cover-image sampling is blocked by CORS).
+      // 2) Also attempt to re-sample from the saved labelThumb (data URL) + cover (if CORS allows).
+      coverSamplerImg = null;
+      labelSamplerImg = null;
+
+      if (Array.isArray(rec.accentRgb) && rec.accentRgb.length >= 3) {
+        setResultsAccentRgb(rec.accentRgb);
+      } else {
+        setResultsAccentRgb([180, 0, 0]);
+      }
+
+      // Label thumb is a data URL (same-origin), so we can always sample it.
+      setLabelSampler(rec.labelThumb || "");
+
+      // Cover sampling may fail if the host blocks CORS — that's ok; label sampling will still drive the gradient.
+      if (rec.coverImage) {
+        trySampleCoverColor(rec.coverImage);
+      } else {
+        updateResultsGradient();
+      }
+
+      // label overlay
+      detailLabelCircle.style.backgroundImage = rec.labelThumb ? `url(${rec.labelThumb})` : "";
+      detailLabelCircle.classList.toggle("show", !!detailShowLabel);
+      toggleLabelText.textContent = detailShowLabel ? "Hide" : "Show";
+
+      // star should always be "saved" in detail (but allow removal)
+      setStarVisual(detailStarBtn, true);
+    }
+
+    
+
+
+    function preloadImage(url) {
+      return new Promise((resolve) => {
+        if (!url) return resolve();
+        const img = new Image();
+        img.decoding = "async";
+        img.loading = "eager";
+        img.onload = () => resolve();
+        img.onerror = () => resolve(); // don't block on errors/CORS
+        img.src = url;
+        // If decode is available, prefer it (it can finish after onload on some browsers)
+        if (img.decode) {
+          img.decode().then(resolve).catch(() => resolve());
+        }
+      });
+    }
+
+    function preloadRecordAssets(rec) {
+      if (!rec) return Promise.resolve();
+      const tasks = [];
+      if (rec.coverImage) tasks.push(preloadImage(rec.coverImage));
+      if (rec.labelThumb) tasks.push(preloadImage(rec.labelThumb));
+      return Promise.all(tasks).then(() => undefined);
+    }
+function setGhostCardAccent(which, rgb) {
+      // apply per-card accent so we don't flash the active card's red while images/colors settle
+      const card = (which === "prev")
+        ? detailCarousel?.children?.[0]
+        : detailCarousel?.children?.[2];
+      if (!card) return;
+      const bottom = card.querySelector(".detail-bottom");
+      if (!bottom) return;
+
+      const safe = (Array.isArray(rgb) && rgb.length >= 3) ? rgb : [40, 40, 40];
+      bottom.style.setProperty("--card-r", safe[0]);
+      bottom.style.setProperty("--card-g", safe[1]);
+      bottom.style.setProperty("--card-b", safe[2]);
+      bottom.style.background =
+        `linear-gradient(180deg, rgba(${safe[0]},${safe[1]},${safe[2]},0.00) 0%, rgba(${safe[0]},${safe[1]},${safe[2]},0.92) 58%, rgba(${safe[0]},${safe[1]},${safe[2]},0.98) 100%), url('maple.png') center/cover no-repeat`;
+    }
+
+    function renderGhostCard(rec, which) {
+      if (!rec) return;
+
+      // content
+      if (which === "prev") {
+        prevCover.src = rec.coverImage || "";
+        prevArtist.textContent = rec.artist || "Unknown artist";
+        prevTitle.textContent = rec.title || "(untitled)";
+      } else {
+        nextCover.src = rec.coverImage || "";
+        nextArtist.textContent = rec.artist || "Unknown artist";
+        nextTitle.textContent = rec.title || "(untitled)";
+      }
+
+      // style (prefer stored accent)
+      if (Array.isArray(rec.accentRgb) && rec.accentRgb.length >= 3) {
+        setGhostCardAccent(which, rec.accentRgb);
+      } else {
+        // fall back to a neutral dark, so we never flash bright/red
+        setGhostCardAccent(which, [40, 40, 40]);
+      }
+    }
+
+    let _recenterLock = false;
+    function snapDetailToMiddle() {
+      if (!detailCarousel) return;
+      const mid = detailCarousel.children[1];
+      if (!mid) return;
+      const target = mid.offsetLeft - (detailCarousel.clientWidth - mid.clientWidth) / 2;
+      _recenterLock = true;
+      detailCarousel.scrollLeft = target;
+       scheduleDetailTilt();
+      // release on next frame
+      requestAnimationFrame(() => { _recenterLock = false; });
+    }
+
+// Live tilt/scale while swiping the detail carousel
+let _tiltRaf = 0;
+function updateDetailCardTilts() {
+  if (!detailCarousel) return;
+  const cards = Array.from(detailCarousel.children);
+  if (!cards.length) return;
+
+  const cx = detailCarousel.scrollLeft + detailCarousel.clientWidth / 2;
+
+  // Use the center card width as reference
+  const ref = cards[1] || cards[0];
+  const w = Math.max(1, ref.clientWidth);
+
+  for (const c of cards) {
+    const center = c.offsetLeft + c.clientWidth / 2;
+    let t = (center - cx) / w;              // ~ -1 (left), 0 (center), +1 (right)
+    t = Math.max(-1, Math.min(1, t));
+    const tilt = t * 2;                     // degrees: -2 .. +2
+    const sc = 1 - Math.abs(t) * 0.015;     // subtle scale down at edges
+    c.style.setProperty("--tilt", tilt.toFixed(3) + "deg");
+    c.style.setProperty("--cardScale", sc.toFixed(3));
+  }
+}
+function scheduleDetailTilt() {
+  if (_tiltRaf) return;
+  _tiltRaf = requestAnimationFrame(() => {
+    _tiltRaf = 0;
+    updateDetailCardTilts();
+  });
+}
+
+
+    function renderDetailCarousel(opts = {}) {
+      const sorted = getSortedCatalog();
+      if (!sorted.length) {
+        showCatalog();
+        return;
+      }
+      detailIndex = (detailIndex + sorted.length) % sorted.length;
+
+      const activeCard = detailCarousel ? detailCarousel.children[1] : null;
+      if (activeCard && opts.animate) {
+        activeCard.classList.add("is-swapping");
+      }
+
+      const prev = sorted[(detailIndex - 1 + sorted.length) % sorted.length];
+      const cur  = sorted[detailIndex];
+      const next = sorted[(detailIndex + 1) % sorted.length];
+
+      // Preload assets for smoother swaps
+      const _prevReady = preloadRecordAssets(prev);
+      const _curReady  = preloadRecordAssets(cur);
+      const _nextReady = preloadRecordAssets(next);
+renderGhostCard(prev, "prev");
+      renderGhostCard(next, "next");
+
+      // center card is the real interactive view
+      renderDetailFromIndex();
+
+      // keep the interactive card centered so the user always swipes from the middle
+      requestAnimationFrame(snapDetailToMiddle);
+
+      if (activeCard && opts.animate) {
+        // Fade-in only after the new center assets are ready (avoids "pop" on swipe settle)
+        const waitForCover = () => {
+          const img = detailCover;
+          if (!img) return Promise.resolve();
+
+          const waitLoad = () => new Promise((resolve) => {
+            if (img.complete && img.naturalWidth > 0) return resolve();
+            const onDone = () => {
+              img.removeEventListener("load", onDone);
+              img.removeEventListener("error", onDone);
+              resolve();
+            };
+            img.addEventListener("load", onDone, { once: true });
+            img.addEventListener("error", onDone, { once: true });
+          });
+
+          const waitDecode = () => {
+            try {
+              return (img.decode ? img.decode().catch(() => {}) : Promise.resolve());
+            } catch (e) {
+              return Promise.resolve();
+            }
+          };
+
+          return waitLoad().then(waitDecode);
+        };
+
+        Promise.all([_curReady, waitForCover()])
+          .finally(() => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => activeCard.classList.remove("is-swapping"));
+            });
+          });
+      }
+}
+
+    if (detailCarousel) {
+      let scrollTimer = null;
+      detailCarousel.addEventListener("scroll", () => {
+        scheduleDetailTilt();
+        if (_recenterLock) return;
+        if (scrollTimer) clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => {
+          if (_recenterLock) return;
+
+          const cx = detailCarousel.scrollLeft + detailCarousel.clientWidth / 2;
+          const cards = Array.from(detailCarousel.children);
+          let bestI = 1, bestD = Infinity;
+          for (let i = 0; i < cards.length; i++) {
+            const c = cards[i];
+            const center = c.offsetLeft + c.clientWidth / 2;
+            const d = Math.abs(center - cx);
+            if (d < bestD) { bestD = d; bestI = i; }
+          }
+
+          if (bestI === 0) {
+            detailIndex = (detailIndex - 1 + getSortedCatalog().length) % getSortedCatalog().length;
+            detailShowLabel = false;
+            renderDetailCarousel({ animate: true });
+          } else if (bestI === 2) {
+            detailIndex = (detailIndex + 1) % getSortedCatalog().length;
+            detailShowLabel = false;
+            renderDetailCarousel({ animate: true });
+          } else {
+            snapDetailToMiddle();
+          }
+        }, 120);
+      }, { passive: true });
+
+      window.addEventListener("resize", () => requestAnimationFrame(snapDetailToMiddle));
+    }
+
+toggleLabelBtn.addEventListener("click", () => {
+      detailShowLabel = !detailShowLabel;
+      detailLabelCircle.classList.toggle("show", !!detailShowLabel);
+      toggleLabelText.textContent = detailShowLabel ? "Hide" : "Show";
+    });
+
+    detailStarBtn.addEventListener("click", () => {
+      const sorted = getSortedCatalog();
+      const rec = sorted[detailIndex];
+      if (!rec) return;
+
+      const id = stableIdForRecord(rec);
+      const idx = catalog.findIndex(x => stableIdForRecord(x) === id);
+      if (idx >= 0) {
+        catalog.splice(idx, 1);
+        saveCatalog();
+        toastMsg("Removed from catalog");
+        // stay on detail but move to nearest record
+        const after = getSortedCatalog();
+        if (!after.length) {
+          showCatalog();
+          return;
+        }
+        detailIndex = Math.min(detailIndex, after.length - 1);
+        renderCatalog(); // keep list in sync
+        renderDetailCarousel();
+      }
+    });
+
+    function swipeTo(delta) {
+      const sorted = getSortedCatalog();
+      if (!sorted.length) return;
+      detailIndex = (detailIndex + delta + sorted.length) % sorted.length;
+      detailShowLabel = false;
+      renderDetailCarousel();
+    }
+    
+    // -----------------------------
+    // Export / Import (ZIP)
+    // -----------------------------
+    exportBtn.addEventListener("click", async () => {
+      const arr = loadCatalog();
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        sortKey,
+        records: arr
+      };
+
+      try {
+        const zip = new JSZip();
+        zip.file("catalog.json", JSON.stringify(payload, null, 2));
+        zip.file("README.txt",
+`33anda3rd catalog export
+
+- catalog.json includes:
+  - artist, title, discogsUrl
+  - coverImage (URL reference)
+  - labelThumb (lower-resolution data URL)
+
+Importing merges by discogsUrl (or artist+title fallback).`);
+
+        const blob = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement("a");
+        const ts = new Date().toISOString().replace(/[:.]/g,"-");
+        a.href = URL.createObjectURL(blob);
+        a.download = `33anda3rd-catalog-${ts}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 1000);
+
+        toastMsg("Exported ZIP");
+      } catch (e) {
+        console.error(e);
+        toastMsg("Export failed");
+      }
+    });
+
+    importBtn.addEventListener("click", () => {
+      importZipInput.value = "";
+      importZipInput.click();
+    });
+
+    importZipInput.addEventListener("change", async () => {
+      const file = importZipInput.files && importZipInput.files[0];
+      if (!file) return;
+
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const jsonFile = zip.file("catalog.json");
+        if (!jsonFile) {
+          toastMsg("No catalog.json found");
+          return;
+        }
+
+        const raw = await jsonFile.async("string");
+        const incoming = JSON.parse(raw);
+        const incomingRecs = Array.isArray(incoming.records) ? incoming.records : [];
+
+        const existing = loadCatalog();
+        const map = new Map(existing.map(r => [stableIdForRecord(r), r]));
+
+        let added = 0;
+        for (const r of incomingRecs) {
+          const cleaned = {
+            artist: String(r.artist || "").trim(),
+            title: String(r.title || "").trim(),
+            discogsUrl: String(r.discogsUrl || "").trim(),
+            coverImage: String(r.coverImage || "").trim(),
+            labelThumb: String(r.labelThumb || "").trim(),
+            accentRgb: (Array.isArray(r.accentRgb) && r.accentRgb.length >= 3) ? r.accentRgb.slice(0,3).map(v => Math.max(0, Math.min(255, Number(v)||0))) : undefined,
+            createdAt: (typeof r.createdAt === "number") ? r.createdAt : Date.now()
+          };
+          const id = stableIdForRecord(cleaned);
+          if (!map.has(id)) {
+            map.set(id, cleaned);
+            added++;
+          }
+        }
+
+        const merged = Array.from(map.values());
+        // keep newest first in storage; list/detail sorting is independent
+        merged.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+        catalog = merged;
+        saveCatalog();
+
+        toastMsg(added ? `Imported +${added}` : "Nothing new");
+        renderCatalog();
+      } catch (e) {
+        console.error(e);
+        toastMsg("Import failed");
+      }
+    });
+
+    // -----------------------------
+    // Gradient sampling (unchanged)
+    // -----------------------------
+    function setResultsAccentRgb(rgb) {
+      currentAccentRgb = Array.isArray(rgb) ? rgb.slice(0, 3) : [180, 0, 0];
+      document.documentElement.style.setProperty("--results-rgb", `${currentAccentRgb[0]}, ${currentAccentRgb[1]}, ${currentAccentRgb[2]}`);
+    }
+
+    
+    function setLabelSampler(src) {
+      if (!src) { labelSamplerImg = null; return; }
+      const img = new Image();
+      img.onload = () => {
+        labelSamplerImg = img;
+        updateResultsGradient();
+      };
+      img.onerror = () => { labelSamplerImg = null; };
+      img.src = src;
+    }
+
+    function trySampleCoverColor(url) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        coverSamplerImg = img;
+        updateResultsGradient();
+      };
+      img.onerror = () => {
+        coverSamplerImg = null;
+      labelSamplerImg = null;
+      };
+      img.src = url;
+    }
+
+    function updateResultsGradient() {
+      const sources = [];
+      if (labelSamplerImg) sources.push({ type: "imgEl", value: labelSamplerImg, weight: 1.35 });
+      if (coverSamplerImg) sources.push({ type: "imgEl", value: coverSamplerImg, weight: 1.0 });
+
+      if (!sources.length) {
+        setResultsAccentRgb([180, 0, 0]);
+        return;
+      }
+
+      const rgb = dominantRgbFromSources(sources);
+      const safe = ensureReadableOnWhite(rgb);
+      setResultsAccentRgb(safe);
+    }
+
+    function dominantRgbFromSources(sources) {
+      const buckets = new Map();
+
+      for (const s of sources) {
+        try {
+          const imageData = getPixelsFromSource(s);
+          if (!imageData) continue;
+
+          const data = imageData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const a = data[i + 3];
+            if (a < 64) continue;
+
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            const sat = max - min;
+            const bright = (r + g + b) / 3;
+
+            if (bright < 18) continue;
+            if (bright > 245 && sat < 10) continue;
+            if (sat < 8 && bright > 180) continue;
+
+            const rq = r >> 3;
+            const gq = g >> 3;
+            const bq = b >> 3;
+            const key = (rq << 10) | (gq << 5) | bq;
+
+            const add = (s.weight || 1);
+            buckets.set(key, (buckets.get(key) || 0) + add);
+          }
+        } catch (e) {}
+      }
+
+      if (!buckets.size) return [18, 18, 18];
+
+      let bestKey = null;
+      let bestCount = -1;
+      for (const [k, c] of buckets.entries()) {
+        if (c > bestCount) {
+          bestCount = c;
+          bestKey = k;
+        }
+      }
+
+      const rq = (bestKey >> 10) & 31;
+      const gq = (bestKey >> 5) & 31;
+      const bq = bestKey & 31;
+
+      return [
+        Math.min(255, (rq << 3) + 4),
+        Math.min(255, (gq << 3) + 4),
+        Math.min(255, (bq << 3) + 4)
+      ];
+    }
+
+    function getPixelsFromSource(source) {
+      const sampleSize = 72;
+      const tmp = document.createElement("canvas");
+      tmp.width = sampleSize;
+      tmp.height = sampleSize;
+      const tctx2 = tmp.getContext("2d", { willReadFrequently: true });
+
+      if (source.type === "dataUrl") {
+        const img = new Image();
+        img.src = source.value;
+        if (!img.complete) return null;
+        tctx2.drawImage(img, 0, 0, sampleSize, sampleSize);
+        return tctx2.getImageData(0, 0, sampleSize, sampleSize);
+      }
+
+      if (source.type === "imgEl") {
+        const imgEl = source.value;
+        if (!imgEl.complete || !imgEl.naturalWidth) return null;
+        tctx2.drawImage(imgEl, 0, 0, sampleSize, sampleSize);
+        return tctx2.getImageData(0, 0, sampleSize, sampleSize);
+      }
+
+      return null;
+    }
+
+    function ensureReadableOnWhite(rgb) {
+      const [r, g, b] = rgb;
+      if (r > 235 && g > 235 && b > 235) return [18, 18, 18];
+
+      let out = [r, g, b];
+      let tries = 0;
+      while (contrastRatio(out, [255, 255, 255]) < 4.5 && tries < 12) {
+        out = darkenRgb(out, 0.08);
+        tries++;
+      }
+
+      if (contrastRatio(out, [255, 255, 255]) < 4.5) return [18, 18, 18];
+      return out;
+    }
+
+    function darkenRgb(rgb, amount) {
+      const [r, g, b] = rgb;
+      return [
+        Math.max(0, Math.round(r * (1 - amount))),
+        Math.max(0, Math.round(g * (1 - amount))),
+        Math.max(0, Math.round(b * (1 - amount)))
+      ];
+    }
+
+    function contrastRatio(rgb1, rgb2) {
+      const L1 = relLuminance(rgb1);
+      const L2 = relLuminance(rgb2);
+      const lighter = Math.max(L1, L2);
+      const darker = Math.min(L1, L2);
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    function relLuminance(rgb) {
+      const [r, g, b] = rgb.map(v => v / 255);
+      const R = (r <= 0.03928) ? (r / 12.92) : Math.pow((r + 0.055) / 1.055, 2.4);
+      const G = (g <= 0.03928) ? (g / 12.92) : Math.pow((g + 0.055) / 1.055, 2.4);
+      const B = (b <= 0.03928) ? (b / 12.92) : Math.pow((b + 0.055) / 1.055, 2.4);
+      return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+    }
+
+    // -----------------------------
+    // Detail entry point from catalog
+    // -----------------------------
+    // Keep catalog view up-to-date when the app loads
+    window.addEventListener("load", () => {
+      catalog = loadCatalog();
+      setStarVisual(saveStarBtn, isSavedCurrent());
+      renderCatalog();
+    });
+  </script>
+</body>
+</html>
